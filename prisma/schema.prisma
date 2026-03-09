@@ -1,0 +1,694 @@
+// Prisma Schema for QtusDevMarket
+// Database: PostgreSQL (primary) / MySQL (secondary)
+// Tất cả models đồng bộ với SQL schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// CORE MODELS
+// ============================================================
+
+model User {
+  id           Int       @id @default(autoincrement())
+  uid          String?   @unique // Firebase UID sync
+  email        String    @unique
+  username     String?   @unique
+  name         String?
+  passwordHash String?   @map("password_hash")
+  avatarUrl    String?   @map("avatar_url")
+  ipAddress    String?   @map("ip_address")
+  role         String    @default("user") // 'user' | 'admin' | 'superadmin'
+  balance      Decimal   @default(0) @db.Decimal(15, 2)
+  status       String    @default("active") // 'active' | 'banned' | 'pending'
+  lastActivity DateTime? @map("last_activity")
+  loginCount   Int       @default(0) @map("login_count")
+  referralCode String?   @map("referral_code")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // Relations
+  profile              UserProfile?
+  deposits             Deposit[]
+  withdrawals          Withdrawal[]
+  purchases            Purchase[]
+  reviews              Review[]
+  chats                Chat[]           @relation("UserChats")
+  adminChats           Chat[]           @relation("AdminChats")
+  wishlists            Wishlist[]
+  notifications        Notification[]
+  notificationPref     NotificationPreference?
+  downloads            Download[]
+  transactions         Transaction[]
+  passwordResets       PasswordReset[]
+  userCoupons          UserCoupon[]
+  referralsMade        Referral[]       @relation("Referrer")
+  referralsReceived    Referral[]       @relation("Referred")
+  subscriptions        Subscription[]
+  reviewVotes          ReviewVote[]
+  followers            Follow[]         @relation("Following")
+  following            Follow[]         @relation("Follower")
+  productComments      ProductComment[]
+  analyticsEvents      AnalyticsEvent[]
+  productViews         ProductView[]
+  adminActions         AdminAction[]
+  aiLogs               AiLog[]
+  adminRecord          Admin?
+
+  @@index([email])
+  @@index([username])
+  @@index([role])
+  @@index([status])
+  @@index([referralCode], map: "idx_users_referral_code")
+  @@index([email, role], map: "idx_users_email_role")
+  @@index([role, status], map: "idx_users_role_status")
+  @@index([createdAt(sort: Desc)], map: "idx_users_created_at_desc")
+  @@index([balance(sort: Desc)], map: "idx_users_balance_desc")
+  @@map("users")
+}
+
+model UserProfile {
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @unique @map("user_id")
+  phone               String?
+  address             String?  @db.Text
+  city                String?
+  country             String?
+  postalCode          String?  @map("postal_code")
+  socialLinks         Json?    @map("social_links") // JSON object
+  twoFactorEnabled    Boolean  @default(false) @map("two_factor_enabled")
+  twoFactorSecret     String?  @db.Text @map("two_factor_secret")
+  twoFactorBackupCodes String? @db.Text @map("two_factor_backup_codes")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_profiles")
+}
+
+model Product {
+  id            Int       @id @default(autoincrement())
+  title         String
+  description   String?   @db.Text
+  price         Decimal   @db.Decimal(10, 2)
+  category      String?
+  demoUrl       String?   @map("demo_url")
+  downloadUrl   String?   @map("download_url")
+  fileUrl       String?   @map("file_url")
+  thumbnail     String?
+  imageUrl      String?   @map("image_url")
+  tags          String[]
+  isActive      Boolean   @default(true) @map("is_active")
+  userId        Int?      @map("user_id") // seller/owner
+  downloadCount Int       @default(0) @map("download_count")
+  searchVector  Unsupported("tsvector")? @map("search_vector")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  // Relations
+  purchases       Purchase[]
+  reviews         Review[]
+  wishlists       Wishlist[]
+  downloads       Download[]
+  productRating   ProductRating?
+  productViews    ProductView[]
+  productComments ProductComment[]
+  bundleProducts  BundleProduct[]
+  transactions    Transaction[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([userId])
+  @@index([category, isActive], map: "idx_products_category_active")
+  @@index([price], map: "idx_products_price")
+  @@index([createdAt(sort: Desc)], map: "idx_products_created_at_desc")
+  @@map("products")
+}
+
+// ============================================================
+// FINANCIAL MODELS
+// ============================================================
+
+model Deposit {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  userEmail     String?   @map("user_email")
+  userName      String?   @map("user_name")
+  amount        Decimal   @db.Decimal(15, 2)
+  method        String?
+  transactionId String?   @map("transaction_id")
+  status        String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  createdAt     DateTime  @default(now()) @map("timestamp")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  approvedTime  DateTime? @map("approved_time")
+  approvedBy    String?   @map("approved_by")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt], map: "idx_deposits_timestamp")
+  @@index([userId, status], map: "idx_deposits_user_status")
+  @@index([status, createdAt(sort: Desc)], map: "idx_deposits_status_created")
+  @@map("deposits")
+}
+
+model Withdrawal {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  userEmail     String?   @map("user_email")
+  userName      String?   @map("user_name")
+  amount        Decimal   @db.Decimal(15, 2)
+  bankName      String?   @map("bank_name")
+  accountNumber String?   @map("account_number")
+  accountName   String?   @map("account_name")
+  status        String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  approvedTime  DateTime? @map("approved_time")
+  approvedBy    String?   @map("approved_by")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId, status], map: "idx_withdrawals_user_status")
+  @@index([status, createdAt(sort: Desc)], map: "idx_withdrawals_status_created")
+  @@map("withdrawals")
+}
+
+model Purchase {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  productId Int       @map("product_id")
+  amount    Decimal   @db.Decimal(15, 2)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+  @@index([createdAt])
+  @@index([userId, createdAt(sort: Desc)], map: "idx_purchases_user_created")
+  @@map("purchases")
+}
+
+model Transaction {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  productId     Int?      @map("product_id")
+  referenceCode String?   @unique @map("reference_code")
+  amount        Decimal   @db.Decimal(18, 2)
+  type          String    // 'deposit' | 'withdraw' | 'purchase'
+  status        String    @default("pending") // 'pending' | 'approved' | 'rejected' | 'failed'
+  method        String?
+  metadata      Json?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([type, status], map: "idx_transactions_type_status")
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+// ============================================================
+// REVIEW & RATING MODELS
+// ============================================================
+
+model Review {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  productId    Int       @map("product_id")
+  rating       Int       // 1-5
+  comment      String?   @db.Text
+  images       String[]  // array of image URLs
+  helpfulCount Int       @default(0) @map("helpful_count")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // Relations
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  votes   ReviewVote[]
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+  @@index([rating])
+  @@index([productId, createdAt(sort: Desc)], map: "idx_reviews_product_created")
+  @@index([productId, rating], map: "idx_reviews_product_rating")
+  @@map("reviews")
+}
+
+model ReviewVote {
+  id        Int      @id @default(autoincrement())
+  reviewId  Int      @map("review_id")
+  userId    Int      @map("user_id")
+  isHelpful Boolean  @map("is_helpful")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, userId])
+  @@index([reviewId])
+  @@index([userId])
+  @@map("review_votes")
+}
+
+model ProductRating {
+  productId     Int      @id @map("product_id")
+  averageRating Decimal  @default(0) @db.Decimal(4, 2) @map("average_rating")
+  totalRatings  Int      @default(0) @map("total_ratings")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_ratings")
+}
+
+// ============================================================
+// COMMUNICATION MODELS
+// ============================================================
+
+model Chat {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  adminId   Int?      @map("admin_id")
+  message   String    @db.Text
+  isAdmin   Boolean   @default(false) @map("is_admin")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  user  User  @relation("UserChats", fields: [userId], references: [id], onDelete: Cascade)
+  admin User? @relation("AdminChats", fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([isAdmin])
+  @@index([createdAt])
+  @@index([userId, createdAt(sort: Desc)], map: "idx_chats_user_created")
+  @@map("chats")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  type      String
+  title     String?
+  message   String    @db.Text
+  isRead    Boolean   @default(false) @map("is_read")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([userId, isRead, createdAt(sort: Desc)], map: "idx_notifications_user_read")
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  userId            Int     @id @map("user_id")
+  emailNotifications Boolean @default(true) @map("email_notifications")
+  pushNotifications  Boolean @default(true) @map("push_notifications")
+  smsNotifications   Boolean @default(false) @map("sms_notifications")
+  wishlistPriceDrop  Boolean @default(true) @map("wishlist_price_drop")
+  newProductAlerts   Boolean @default(true) @map("new_product_alerts")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ============================================================
+// WISHLIST & SOCIAL MODELS
+// ============================================================
+
+model Wishlist {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  productId Int       @map("product_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+  @@map("wishlists")
+}
+
+model Follow {
+  followerId  Int      @map("follower_id")
+  followingId Int      @map("following_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+model ProductComment {
+  id        Int       @id @default(autoincrement())
+  productId Int       @map("product_id")
+  userId    Int       @map("user_id")
+  content   String    @db.Text
+  parentId  Int?      @map("parent_id") // nested comments
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  product  Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   ProductComment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  children ProductComment[] @relation("CommentThread")
+
+  @@index([productId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("product_comments")
+}
+
+// ============================================================
+// DOWNLOAD & TRACKING MODELS
+// ============================================================
+
+model Download {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  productId    Int      @map("product_id")
+  downloadedAt DateTime @default(now()) @map("downloaded_at")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @db.Text @map("user_agent")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([downloadedAt])
+  @@index([userId, productId, downloadedAt], map: "idx_downloads_user_product_date")
+  @@map("downloads")
+}
+
+model AnalyticsEvent {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  eventType String   @map("event_type") // 'page_view', 'product_view', 'purchase', etc.
+  eventData Json?    @map("event_data")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @db.Text @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("analytics_events")
+}
+
+model ProductView {
+  id        Int      @id @default(autoincrement())
+  productId Int      @map("product_id")
+  userId    Int?     @map("user_id")
+  ipAddress String?  @map("ip_address")
+  viewedAt  DateTime @default(now()) @map("viewed_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@index([userId])
+  @@index([viewedAt])
+  @@map("product_views")
+}
+
+// ============================================================
+// COUPON & REFERRAL MODELS
+// ============================================================
+
+model Coupon {
+  id                Int       @id @default(autoincrement())
+  code              String    @unique
+  name              String?
+  title             String?
+  description       String?   @db.Text
+  discountType      String    @default("percentage") @map("discount_type") // 'percentage' | 'fixed'
+  discountValue     Decimal   @default(0) @db.Decimal(10, 2) @map("discount_value")
+  minPurchaseAmount Decimal?  @default(0) @db.Decimal(15, 2) @map("min_purchase_amount")
+  maxDiscountAmount Decimal?  @db.Decimal(15, 2) @map("max_discount_amount")
+  usageLimit        Int?      @map("usage_limit")
+  validFrom         DateTime? @map("valid_from")
+  validUntil        DateTime? @map("valid_until")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  userCoupons UserCoupon[]
+
+  @@index([code])
+  @@index([isActive])
+  @@index([validFrom, validUntil], map: "idx_coupons_valid")
+  @@map("coupons")
+}
+
+model UserCoupon {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  couponId  Int      @map("coupon_id")
+  usedAt    DateTime @default(now()) @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, couponId])
+  @@index([userId])
+  @@index([couponId])
+  @@map("user_coupons")
+}
+
+model Referral {
+  id                Int      @id @default(autoincrement())
+  referrerId        Int      @map("referrer_id")
+  referredId        Int      @map("referred_id")
+  commissionPercent Decimal  @default(10) @db.Decimal(5, 2) @map("commission_percent")
+  totalEarnings     Decimal  @default(0) @db.Decimal(15, 2) @map("total_earnings")
+  status            String   @default("pending") // 'pending' | 'active' | 'paid'
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  referrer User @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred User @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+
+  @@unique([referrerId, referredId])
+  @@index([referrerId])
+  @@index([referredId])
+  @@index([status])
+  @@map("referrals")
+}
+
+// ============================================================
+// BUNDLE & SUBSCRIPTION MODELS
+// ============================================================
+
+model Bundle {
+  id            Int       @id @default(autoincrement())
+  name          String
+  slug          String?   @unique
+  description   String?   @db.Text
+  price         Decimal   @db.Decimal(15, 2)
+  discountPercent Int     @default(0) @map("discount_percent")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  bundleProducts BundleProduct[]
+
+  @@index([isActive])
+  @@index([price])
+  @@map("bundles")
+}
+
+model BundleProduct {
+  id        Int @id @default(autoincrement())
+  bundleId  Int @map("bundle_id")
+  productId Int @map("product_id")
+
+  // Relations
+  bundle  Bundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([bundleId, productId])
+  @@index([bundleId])
+  @@index([productId])
+  @@map("bundle_products")
+}
+
+model SubscriptionBenefit {
+  id              Int      @id @default(autoincrement())
+  plan            String   @unique
+  name            String?
+  description     String?  @db.Text
+  discountPercent Int      @default(0) @map("discount_percent")
+  freeDownloads   Int      @default(0) @map("free_downloads")
+  prioritySupport Boolean  @default(false) @map("priority_support")
+  earlyAccess     Boolean  @default(false) @map("early_access")
+  perks           Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([plan])
+  @@map("subscription_benefits")
+}
+
+model Subscription {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  plan      String    // 'basic' | 'premium' | 'enterprise'
+  status    String    @default("active") // 'active' | 'expired' | 'cancelled'
+  startDate DateTime  @default(now()) @map("start_date")
+  endDate   DateTime? @map("end_date")
+  meta      Json?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([plan])
+  @@index([status])
+  @@index([startDate])
+  @@map("subscriptions")
+}
+
+// ============================================================
+// AUTH & SECURITY MODELS
+// ============================================================
+
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_resets")
+}
+
+model Admin {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @unique @map("user_id")
+  role      String    // 'superadmin' | 'admin'
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([role])
+  @@map("admin")
+}
+
+// ============================================================
+// ADMIN & AI LOGGING MODELS
+// ============================================================
+
+model AdminAction {
+  id         Int      @id @default(autoincrement())
+  adminId    Int      @map("admin_id")
+  actionType String   @map("action_type")
+  payload    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  // Relations
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([actionType])
+  @@index([createdAt])
+  @@map("admin_actions")
+}
+
+model AiLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  prompt    String   @db.Text
+  response  String?  @db.Text
+  provider  String   @default("gemini")
+  latencyMs Int?     @map("latency_ms")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("ai_logs")
+}

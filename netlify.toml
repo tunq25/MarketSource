@@ -1,0 +1,43 @@
+[build]
+  command = "rm -f pnpm-lock.yaml && npm ci --legacy-peer-deps && npm run build"
+  # ✅ FIX: Bỏ publish directive - Netlify Next.js plugin tự động xử lý output
+  # publish = ".next"  # Không cần vì plugin tự xử lý
+
+[build.environment]
+  NODE_VERSION = "20"
+  # ✅ FIX: Đồng bộ với Dockerfile (Node 22.18.0)
+  # Force npm instead of pnpm
+  NPM_FLAGS = "--legacy-peer-deps"
+  # Disable pnpm auto-detection completely
+  NETLIFY_USE_PNPM = "false"
+  # Disable corepack to prevent pnpm auto-detection
+  COREPACK_ENABLE_STRICT = "0"
+  COREPACK_ENABLE = "0"
+  # Explicitly set package manager
+  PACKAGE_MANAGER = "npm"
+  # Disable pnpm completely
+  PNPM_FLAGS = ""
+  # Use npm ci for faster, reliable builds
+  NPM_CONFIG_PRODUCTION = "false"
+  # Ignore pnpm-lock.yaml if exists
+  PNPM_IGNORE_LOCKFILE = "true"
+  
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+  
+[build.processing]
+  skip_processing = false
+
+# Health check endpoints
+[[redirects]]
+  from = "/health"
+  to = "/api/health"
+  status = 200
+  force = false
+
+[[redirects]]
+  from = "/health/database"
+  to = "/api/health/database"
+  status = 200
+  force = false
+

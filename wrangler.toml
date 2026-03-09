@@ -1,0 +1,10 @@
+   name = "qtusdev-market"
+   compatibility_date = "2024-09-01"
+   compatibility_flags = ["nodejs_compat"]
+   pages_build_output_dir = ".open-next"
+
+   [observability]
+   enabled = true
+
+   [vars]
+   NODE_VERSION = "20.14.0"

@@ -1,0 +1,1628 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.admin (
+  id integer NOT NULL DEFAULT nextval('admin_id_seq'::regclass),
+  user_id integer NOT NULL UNIQUE,
+  role character varying NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  deleted_at timestamp with time zone,
+  CONSTRAINT admin_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.admin_actions (
+  id integer NOT NULL DEFAULT nextval('admin_actions_id_seq'::regclass),
+  admin_id integer NOT NULL,
+  action_type character varying NOT NULL,
+  payload jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  deleted_at timestamp with time zone,
+  CONSTRAINT admin_actions_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_actions_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.affiliate_members (
+  id bigint NOT NULL DEFAULT nextval('affiliate_members_id_seq'::regclass),
+  user_id bigint,
+  program_id bigint,
+  affiliate_code character varying NOT NULL UNIQUE,
+  status character varying DEFAULT 'pending'::character varying,
+  total_earnings numeric DEFAULT 0,
+  pending_earnings numeric DEFAULT 0,
+  approved_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT affiliate_members_pkey PRIMARY KEY (id),
+  CONSTRAINT affiliate_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT affiliate_members_program_id_fkey FOREIGN KEY (program_id) REFERENCES public.affiliate_programs(id)
+);
+CREATE TABLE public.affiliate_programs (
+  id bigint NOT NULL DEFAULT nextval('affiliate_programs_id_seq'::regclass),
+  name character varying NOT NULL,
+  description text,
+  commission_type character varying DEFAULT 'percentage'::character varying,
+  commission_value numeric NOT NULL,
+  cookie_days integer DEFAULT 30,
+  min_payout numeric,
+  terms text,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT affiliate_programs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.affiliate_transactions (
+  id bigint NOT NULL DEFAULT nextval('affiliate_transactions_id_seq'::regclass),
+  affiliate_id bigint,
+  order_id bigint,
+  commission_amount numeric NOT NULL,
+  status character varying DEFAULT 'pending'::character varying,
+  paid_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT affiliate_transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT affiliate_transactions_affiliate_id_fkey FOREIGN KEY (affiliate_id) REFERENCES public.affiliate_members(id),
+  CONSTRAINT affiliate_transactions_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id)
+);
+CREATE TABLE public.ai_logs (
+  id integer NOT NULL DEFAULT nextval('ai_logs_id_seq'::regclass),
+  user_id integer,
+  prompt text NOT NULL,
+  response text,
+  provider character varying DEFAULT 'gemini'::character varying,
+  latency_ms integer,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  deleted_at timestamp with time zone,
+  CONSTRAINT ai_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT ai_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.analytics_events (
+  id integer NOT NULL DEFAULT nextval('analytics_events_id_seq'::regclass),
+  user_id integer,
+  event_type character varying NOT NULL,
+  event_data jsonb,
+  ip_address character varying,
+  user_agent text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT analytics_events_pkey PRIMARY KEY (id),
+  CONSTRAINT analytics_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.announcements (
+  id bigint NOT NULL DEFAULT nextval('announcements_id_seq'::regclass),
+  title character varying NOT NULL,
+  message text NOT NULL,
+  type character varying DEFAULT 'info'::character varying,
+  priority character varying DEFAULT 'normal'::character varying,
+  target_users jsonb,
+  is_active boolean DEFAULT true,
+  show_on_homepage boolean DEFAULT false,
+  starts_at timestamp with time zone,
+  ends_at timestamp with time zone,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT announcements_pkey PRIMARY KEY (id),
+  CONSTRAINT announcements_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.api_logs (
+  id bigint NOT NULL DEFAULT nextval('api_logs_id_seq'::regclass),
+  endpoint text NOT NULL,
+  method character varying NOT NULL,
+  user_id bigint,
+  ip_address character varying,
+  request_headers jsonb,
+  request_body jsonb,
+  response_status integer,
+  response_body jsonb,
+  duration_ms integer,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT api_logs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.audit_logs (
+  id bigint NOT NULL DEFAULT nextval('audit_logs_id_seq'::regclass),
+  user_id bigint,
+  action character varying NOT NULL,
+  entity_type character varying,
+  entity_id bigint,
+  old_values jsonb,
+  new_values jsonb,
+  ip_address character varying,
+  user_agent text,
+  created_at timestamp with time zone DEFAULT now(),
+  admin_id bigint,
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT audit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT audit_logs_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.backups (
+  id bigint NOT NULL DEFAULT nextval('backups_id_seq'::regclass),
+  label character varying,
+  file_path text NOT NULL,
+  file_size bigint,
+  type character varying DEFAULT 'manual'::character varying,
+  status character varying DEFAULT 'completed'::character varying,
+  tables ARRAY,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT backups_pkey PRIMARY KEY (id),
+  CONSTRAINT backups_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.bank_accounts (
+  id bigint NOT NULL DEFAULT nextval('bank_accounts_id_seq'::regclass),
+  bank_name character varying NOT NULL,
+  account_number character varying NOT NULL,
+  account_name character varying NOT NULL,
+  branch character varying,
+  swift_code character varying,
+  qr_code_url text,
+  is_active boolean DEFAULT true,
+  is_primary boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT bank_accounts_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.banners (
+  id bigint NOT NULL DEFAULT nextval('banners_id_seq'::regclass),
+  name character varying NOT NULL,
+  position character varying NOT NULL,
+  image_url text NOT NULL,
+  mobile_image_url text,
+  link_url text,
+  alt_text character varying,
+  sort_order integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  starts_at timestamp with time zone,
+  ends_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT banners_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.blog_categories (
+  id bigint NOT NULL DEFAULT nextval('blog_categories_id_seq'::regclass),
+  name character varying NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  description text,
+  parent_id bigint,
+  sort_order integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT blog_categories_pkey PRIMARY KEY (id),
+  CONSTRAINT blog_categories_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.blog_categories(id)
+);
+CREATE TABLE public.blog_posts (
+  id bigint NOT NULL DEFAULT nextval('blog_posts_id_seq'::regclass),
+  title character varying NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  excerpt text,
+  content text,
+  featured_image text,
+  author_id bigint,
+  category_id bigint,
+  tags ARRAY,
+  status character varying DEFAULT 'draft'::character varying,
+  view_count integer DEFAULT 0,
+  meta_title character varying,
+  meta_description text,
+  published_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT blog_posts_pkey PRIMARY KEY (id),
+  CONSTRAINT blog_posts_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.bundle_products (
+  id integer NOT NULL DEFAULT nextval('bundle_products_id_seq'::regclass),
+  bundle_id integer NOT NULL,
+  product_id integer NOT NULL,
+  CONSTRAINT bundle_products_pkey PRIMARY KEY (id),
+  CONSTRAINT bundle_products_bundle_id_fkey FOREIGN KEY (bundle_id) REFERENCES public.bundles(id),
+  CONSTRAINT bundle_products_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.bundles (
+  id integer NOT NULL DEFAULT nextval('bundles_id_seq'::regclass),
+  name character varying NOT NULL,
+  slug character varying UNIQUE,
+  description text,
+  price numeric NOT NULL DEFAULT 0,
+  discount_percent integer NOT NULL DEFAULT 0,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT bundles_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cart (
+  id bigint NOT NULL DEFAULT nextval('cart_id_seq'::regclass),
+  user_id bigint,
+  session_id character varying,
+  coupon_id bigint,
+  coupon_code character varying,
+  expires_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT cart_pkey PRIMARY KEY (id),
+  CONSTRAINT cart_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.cart_items (
+  id bigint NOT NULL DEFAULT nextval('cart_items_id_seq'::regclass),
+  cart_id bigint,
+  product_id bigint,
+  variant_id bigint,
+  quantity integer DEFAULT 1,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT cart_items_pkey PRIMARY KEY (id),
+  CONSTRAINT cart_items_cart_id_fkey FOREIGN KEY (cart_id) REFERENCES public.cart(id),
+  CONSTRAINT cart_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT cart_items_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.product_variants(id)
+);
+CREATE TABLE public.categories (
+  id bigint NOT NULL DEFAULT nextval('categories_id_seq'::regclass),
+  name character varying NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  description text,
+  image_url text,
+  parent_id bigint,
+  sort_order integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  meta_title character varying,
+  meta_description text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT categories_pkey PRIMARY KEY (id),
+  CONSTRAINT categories_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.categories(id)
+);
+CREATE TABLE public.chat_conversations (
+  id bigint NOT NULL DEFAULT nextval('chat_conversations_id_seq'::regclass),
+  type character varying DEFAULT 'direct'::character varying,
+  name character varying,
+  participants ARRAY,
+  last_message_id bigint,
+  last_message_at timestamp with time zone,
+  metadata jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT chat_conversations_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.chat_messages (
+  id bigint NOT NULL DEFAULT nextval('chat_messages_id_seq'::regclass),
+  conversation_id bigint,
+  sender_id bigint,
+  message_type character varying DEFAULT 'text'::character varying,
+  content text,
+  attachments jsonb,
+  reply_to_id bigint,
+  is_edited boolean DEFAULT false,
+  edited_at timestamp with time zone,
+  is_deleted boolean DEFAULT false,
+  deleted_at timestamp with time zone,
+  read_by ARRAY,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.chat_conversations(id),
+  CONSTRAINT chat_messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES public.users(id),
+  CONSTRAINT chat_messages_reply_to_id_fkey FOREIGN KEY (reply_to_id) REFERENCES public.chat_messages(id)
+);
+CREATE TABLE public.chat_participants (
+  id bigint NOT NULL DEFAULT nextval('chat_participants_id_seq'::regclass),
+  conversation_id bigint,
+  user_id bigint,
+  role character varying DEFAULT 'member'::character varying,
+  last_read_at timestamp with time zone,
+  is_muted boolean DEFAULT false,
+  joined_at timestamp with time zone DEFAULT now(),
+  left_at timestamp with time zone,
+  CONSTRAINT chat_participants_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_participants_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.chat_conversations(id),
+  CONSTRAINT chat_participants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.chats (
+  id bigint NOT NULL DEFAULT nextval('chats_id_seq'::regclass),
+  user_id bigint,
+  admin_id bigint,
+  message text NOT NULL,
+  is_admin boolean DEFAULT false,
+  read_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT chats_pkey PRIMARY KEY (id),
+  CONSTRAINT chats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT chats_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.conversion_funnels (
+  id bigint NOT NULL DEFAULT nextval('conversion_funnels_id_seq'::regclass),
+  session_id character varying NOT NULL,
+  user_id bigint,
+  step character varying NOT NULL,
+  product_id bigint,
+  order_id bigint,
+  metadata jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT conversion_funnels_pkey PRIMARY KEY (id),
+  CONSTRAINT conversion_funnels_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.countries (
+  id bigint NOT NULL DEFAULT nextval('countries_id_seq'::regclass),
+  code character varying NOT NULL UNIQUE,
+  name character varying NOT NULL,
+  phone_code character varying,
+  currency_code character varying,
+  is_active boolean DEFAULT true,
+  CONSTRAINT countries_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.coupon_usage (
+  id bigint NOT NULL DEFAULT nextval('coupon_usage_id_seq'::regclass),
+  coupon_id bigint,
+  user_id bigint,
+  order_id bigint,
+  discount_amount numeric NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT coupon_usage_pkey PRIMARY KEY (id),
+  CONSTRAINT coupon_usage_coupon_id_fkey FOREIGN KEY (coupon_id) REFERENCES public.coupons(id),
+  CONSTRAINT coupon_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT coupon_usage_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id)
+);
+CREATE TABLE public.coupons (
+  id bigint NOT NULL DEFAULT nextval('coupons_id_seq'::regclass),
+  code character varying NOT NULL UNIQUE,
+  name character varying,
+  description text,
+  discount_type character varying NOT NULL,
+  discount_value numeric NOT NULL,
+  min_purchase_amount numeric,
+  max_discount_amount numeric,
+  usage_limit integer,
+  usage_per_user integer DEFAULT 1,
+  used_count integer DEFAULT 0,
+  applicable_products ARRAY,
+  applicable_categories ARRAY,
+  excluded_products ARRAY,
+  valid_from timestamp with time zone,
+  valid_until timestamp with time zone,
+  is_active boolean DEFAULT true,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT coupons_pkey PRIMARY KEY (id),
+  CONSTRAINT coupons_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.cron_job_logs (
+  id bigint NOT NULL DEFAULT nextval('cron_job_logs_id_seq'::regclass),
+  job_id bigint,
+  status character varying NOT NULL,
+  output text,
+  error_message text,
+  duration_ms integer,
+  started_at timestamp with time zone NOT NULL,
+  finished_at timestamp with time zone,
+  CONSTRAINT cron_job_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT cron_job_logs_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.cron_jobs(id)
+);
+CREATE TABLE public.cron_jobs (
+  id bigint NOT NULL DEFAULT nextval('cron_jobs_id_seq'::regclass),
+  name character varying NOT NULL UNIQUE,
+  expression character varying NOT NULL,
+  command text NOT NULL,
+  description text,
+  is_active boolean DEFAULT true,
+  last_run_at timestamp with time zone,
+  last_run_status character varying,
+  last_run_duration integer,
+  next_run_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT cron_jobs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.currencies (
+  id bigint NOT NULL DEFAULT nextval('currencies_id_seq'::regclass),
+  code character varying NOT NULL UNIQUE,
+  name character varying NOT NULL,
+  symbol character varying,
+  exchange_rate numeric DEFAULT 1,
+  is_default boolean DEFAULT false,
+  is_active boolean DEFAULT true,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT currencies_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.daily_stats (
+  id bigint NOT NULL DEFAULT nextval('daily_stats_id_seq'::regclass),
+  stat_date date NOT NULL UNIQUE,
+  new_users integer DEFAULT 0,
+  active_users integer DEFAULT 0,
+  total_orders integer DEFAULT 0,
+  total_revenue numeric DEFAULT 0,
+  total_deposits numeric DEFAULT 0,
+  total_withdrawals numeric DEFAULT 0,
+  page_views integer DEFAULT 0,
+  unique_visitors integer DEFAULT 0,
+  conversion_rate numeric,
+  avg_order_value numeric,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT daily_stats_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.deposits (
+  id bigint NOT NULL DEFAULT nextval('deposits_id_seq'::regclass),
+  user_id bigint,
+  amount numeric NOT NULL,
+  method character varying NOT NULL,
+  transaction_id character varying,
+  user_email character varying,
+  user_name character varying,
+  status character varying DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying, 'cancelled'::character varying]::text[])),
+  approved_by character varying,
+  approved_time timestamp with time zone,
+  rejected_reason text,
+  proof_url text,
+  ip_address character varying,
+  timestamp timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT deposits_pkey PRIMARY KEY (id),
+  CONSTRAINT deposits_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.download_links (
+  id bigint NOT NULL DEFAULT nextval('download_links_id_seq'::regclass),
+  user_id bigint,
+  product_id bigint,
+  file_id bigint,
+  token character varying NOT NULL UNIQUE,
+  download_count integer DEFAULT 0,
+  max_downloads integer DEFAULT 5,
+  expires_at timestamp with time zone NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT download_links_pkey PRIMARY KEY (id),
+  CONSTRAINT download_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT download_links_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT download_links_file_id_fkey FOREIGN KEY (file_id) REFERENCES public.product_files(id)
+);
+CREATE TABLE public.downloads (
+  id bigint NOT NULL DEFAULT nextval('downloads_id_seq'::regclass),
+  user_id bigint,
+  product_id bigint,
+  purchase_id bigint,
+  file_id bigint,
+  ip_address character varying,
+  user_agent text,
+  downloaded_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT downloads_pkey PRIMARY KEY (id),
+  CONSTRAINT downloads_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT downloads_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT downloads_purchase_id_fkey FOREIGN KEY (purchase_id) REFERENCES public.purchases(id),
+  CONSTRAINT downloads_file_id_fkey FOREIGN KEY (file_id) REFERENCES public.product_files(id)
+);
+CREATE TABLE public.email_campaigns (
+  id bigint NOT NULL DEFAULT nextval('email_campaigns_id_seq'::regclass),
+  name character varying NOT NULL,
+  subject character varying NOT NULL,
+  from_name character varying,
+  from_email character varying,
+  template_id bigint,
+  content text,
+  target_segment jsonb,
+  status character varying DEFAULT 'draft'::character varying,
+  scheduled_at timestamp with time zone,
+  sent_at timestamp with time zone,
+  total_recipients integer DEFAULT 0,
+  total_opens integer DEFAULT 0,
+  total_clicks integer DEFAULT 0,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT email_campaigns_pkey PRIMARY KEY (id),
+  CONSTRAINT email_campaigns_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.notification_templates(id),
+  CONSTRAINT email_campaigns_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.email_queue (
+  id bigint NOT NULL DEFAULT nextval('email_queue_id_seq'::regclass),
+  to_email character varying NOT NULL,
+  to_name character varying,
+  subject character varying NOT NULL,
+  body text NOT NULL,
+  template_id bigint,
+  variables jsonb,
+  status character varying DEFAULT 'pending'::character varying,
+  attempts integer DEFAULT 0,
+  last_attempt_at timestamp with time zone,
+  sent_at timestamp with time zone,
+  error_message text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT email_queue_pkey PRIMARY KEY (id),
+  CONSTRAINT email_queue_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.notification_templates(id)
+);
+CREATE TABLE public.email_verification_tokens (
+  id bigint NOT NULL DEFAULT nextval('email_verification_tokens_id_seq'::regclass),
+  user_id bigint,
+  email character varying NOT NULL,
+  token character varying NOT NULL UNIQUE,
+  expires_at timestamp with time zone NOT NULL,
+  verified_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT email_verification_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT email_verification_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.error_logs (
+  id bigint NOT NULL DEFAULT nextval('error_logs_id_seq'::regclass),
+  level character varying NOT NULL,
+  message text NOT NULL,
+  context jsonb,
+  stack_trace text,
+  file_path text,
+  line_number integer,
+  user_id bigint,
+  request_url text,
+  request_method character varying,
+  ip_address character varying,
+  user_agent text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT error_logs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.faq_items (
+  id bigint NOT NULL DEFAULT nextval('faq_items_id_seq'::regclass),
+  question text NOT NULL,
+  answer text NOT NULL,
+  order_index integer DEFAULT 0,
+  is_published boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT faq_items_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.faqs (
+  id bigint NOT NULL DEFAULT nextval('faqs_id_seq'::regclass),
+  category character varying,
+  question text NOT NULL,
+  answer text NOT NULL,
+  sort_order integer DEFAULT 0,
+  is_published boolean DEFAULT true,
+  view_count integer DEFAULT 0,
+  helpful_count integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT faqs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.flash_sale_products (
+  id bigint NOT NULL DEFAULT nextval('flash_sale_products_id_seq'::regclass),
+  flash_sale_id bigint,
+  product_id bigint,
+  sale_price numeric NOT NULL,
+  quantity_limit integer,
+  sold_count integer DEFAULT 0,
+  CONSTRAINT flash_sale_products_pkey PRIMARY KEY (id),
+  CONSTRAINT flash_sale_products_flash_sale_id_fkey FOREIGN KEY (flash_sale_id) REFERENCES public.flash_sales(id),
+  CONSTRAINT flash_sale_products_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.flash_sales (
+  id bigint NOT NULL DEFAULT nextval('flash_sales_id_seq'::regclass),
+  name character varying NOT NULL,
+  description text,
+  discount_percentage numeric,
+  starts_at timestamp with time zone NOT NULL,
+  ends_at timestamp with time zone NOT NULL,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT flash_sales_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.follows (
+  follower_id integer NOT NULL,
+  following_id integer NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT follows_pkey PRIMARY KEY (follower_id, following_id),
+  CONSTRAINT follows_follower_id_fkey FOREIGN KEY (follower_id) REFERENCES public.users(id),
+  CONSTRAINT follows_following_id_fkey FOREIGN KEY (following_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.inventory_history (
+  id bigint NOT NULL DEFAULT nextval('inventory_history_id_seq'::regclass),
+  product_id bigint,
+  variant_id bigint,
+  change_type character varying NOT NULL,
+  quantity_change integer NOT NULL,
+  quantity_before integer,
+  quantity_after integer,
+  reason text,
+  reference_type character varying,
+  reference_id bigint,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT inventory_history_pkey PRIMARY KEY (id),
+  CONSTRAINT inventory_history_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT inventory_history_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.product_variants(id),
+  CONSTRAINT inventory_history_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.invoices (
+  id bigint NOT NULL DEFAULT nextval('invoices_id_seq'::regclass),
+  invoice_number character varying NOT NULL UNIQUE,
+  order_id bigint,
+  user_id bigint,
+  subtotal numeric NOT NULL,
+  tax_amount numeric DEFAULT 0,
+  total numeric NOT NULL,
+  status character varying DEFAULT 'issued'::character varying,
+  due_date date,
+  paid_at timestamp with time zone,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT invoices_pkey PRIMARY KEY (id),
+  CONSTRAINT invoices_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT invoices_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.languages (
+  id bigint NOT NULL DEFAULT nextval('languages_id_seq'::regclass),
+  code character varying NOT NULL UNIQUE,
+  name character varying NOT NULL,
+  native_name character varying,
+  is_default boolean DEFAULT false,
+  is_active boolean DEFAULT true,
+  direction character varying DEFAULT 'ltr'::character varying,
+  CONSTRAINT languages_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.login_history (
+  id bigint NOT NULL DEFAULT nextval('login_history_id_seq'::regclass),
+  user_id bigint,
+  ip_address character varying,
+  user_agent text,
+  device_info jsonb,
+  location character varying,
+  status character varying DEFAULT 'success'::character varying,
+  failure_reason text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT login_history_pkey PRIMARY KEY (id),
+  CONSTRAINT login_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.media_library (
+  id bigint NOT NULL DEFAULT nextval('media_library_id_seq'::regclass),
+  file_name character varying NOT NULL,
+  original_name character varying,
+  file_path text NOT NULL,
+  file_url text NOT NULL,
+  file_type character varying,
+  file_size bigint,
+  mime_type character varying,
+  dimensions jsonb,
+  alt_text character varying,
+  caption text,
+  folder character varying,
+  uploaded_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT media_library_pkey PRIMARY KEY (id),
+  CONSTRAINT media_library_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.menus (
+  id bigint NOT NULL DEFAULT nextval('menus_id_seq'::regclass),
+  name character varying NOT NULL,
+  location character varying NOT NULL UNIQUE,
+  items jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT menus_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.notification_preferences (
+  user_id integer NOT NULL,
+  email_notifications boolean DEFAULT true,
+  push_notifications boolean DEFAULT true,
+  sms_notifications boolean DEFAULT false,
+  wishlist_price_drop boolean DEFAULT true,
+  new_product_alerts boolean DEFAULT true,
+  CONSTRAINT notification_preferences_pkey PRIMARY KEY (user_id),
+  CONSTRAINT notification_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.notification_templates (
+  id bigint NOT NULL DEFAULT nextval('notification_templates_id_seq'::regclass),
+  code character varying NOT NULL UNIQUE,
+  name character varying NOT NULL,
+  category character varying,
+  subject character varying,
+  body text NOT NULL,
+  variables jsonb DEFAULT '[]'::jsonb,
+  channels ARRAY DEFAULT ARRAY['in_app'::text],
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notification_templates_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.notifications (
+  id bigint NOT NULL DEFAULT nextval('notifications_id_seq'::regclass),
+  user_id bigint,
+  type character varying NOT NULL,
+  title character varying,
+  message text NOT NULL,
+  data jsonb,
+  is_read boolean DEFAULT false,
+  read_at timestamp with time zone,
+  action_url text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.order_history (
+  id bigint NOT NULL DEFAULT nextval('order_history_id_seq'::regclass),
+  order_id bigint,
+  status character varying NOT NULL,
+  comment text,
+  is_customer_notified boolean DEFAULT false,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_history_pkey PRIMARY KEY (id),
+  CONSTRAINT order_history_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT order_history_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.order_items (
+  id bigint NOT NULL DEFAULT nextval('order_items_id_seq'::regclass),
+  order_id bigint,
+  product_id bigint,
+  variant_id bigint,
+  name character varying NOT NULL,
+  sku character varying,
+  quantity integer NOT NULL DEFAULT 1,
+  unit_price numeric NOT NULL,
+  discount_amount numeric DEFAULT 0,
+  total numeric NOT NULL,
+  attributes jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT order_items_pkey PRIMARY KEY (id),
+  CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT order_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT order_items_variant_id_fkey FOREIGN KEY (variant_id) REFERENCES public.product_variants(id)
+);
+CREATE TABLE public.orders (
+  id bigint NOT NULL DEFAULT nextval('orders_id_seq'::regclass),
+  order_number character varying NOT NULL UNIQUE,
+  user_id bigint,
+  subtotal numeric NOT NULL,
+  discount_amount numeric DEFAULT 0,
+  tax_amount numeric DEFAULT 0,
+  total numeric NOT NULL,
+  status character varying DEFAULT 'pending'::character varying,
+  payment_status character varying DEFAULT 'pending'::character varying,
+  payment_method character varying,
+  shipping_method character varying,
+  shipping_address jsonb,
+  billing_address jsonb,
+  notes text,
+  coupon_id bigint,
+  coupon_code character varying,
+  ip_address character varying,
+  user_agent text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT orders_pkey PRIMARY KEY (id),
+  CONSTRAINT orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.page_views (
+  id bigint NOT NULL DEFAULT nextval('page_views_id_seq'::regclass),
+  page_path text NOT NULL,
+  page_title character varying,
+  user_id bigint,
+  session_id character varying,
+  ip_address character varying,
+  user_agent text,
+  referrer text,
+  utm_source character varying,
+  utm_medium character varying,
+  utm_campaign character varying,
+  country character varying,
+  city character varying,
+  device_type character varying,
+  browser character varying,
+  os character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT page_views_pkey PRIMARY KEY (id),
+  CONSTRAINT page_views_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.pages (
+  id bigint NOT NULL DEFAULT nextval('pages_id_seq'::regclass),
+  title character varying NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  content text,
+  meta_title character varying,
+  meta_description text,
+  featured_image text,
+  status character varying DEFAULT 'draft'::character varying,
+  template character varying,
+  sort_order integer DEFAULT 0,
+  published_at timestamp with time zone,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT pages_pkey PRIMARY KEY (id),
+  CONSTRAINT pages_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.password_reset_tokens (
+  id bigint NOT NULL DEFAULT nextval('password_reset_tokens_id_seq'::regclass),
+  email character varying NOT NULL,
+  token character varying NOT NULL UNIQUE,
+  expires_at timestamp with time zone NOT NULL,
+  used boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT password_reset_tokens_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.password_resets (
+  id integer NOT NULL DEFAULT nextval('password_resets_id_seq'::regclass),
+  user_id integer NOT NULL,
+  token character varying NOT NULL UNIQUE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  expires_at timestamp with time zone NOT NULL,
+  CONSTRAINT password_resets_pkey PRIMARY KEY (id),
+  CONSTRAINT password_resets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.payment_gateways (
+  id bigint NOT NULL DEFAULT nextval('payment_gateways_id_seq'::regclass),
+  name character varying NOT NULL,
+  code character varying NOT NULL UNIQUE,
+  provider character varying,
+  config jsonb,
+  webhook_url text,
+  is_sandbox boolean DEFAULT false,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT payment_gateways_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.payment_logs (
+  id bigint NOT NULL DEFAULT nextval('payment_logs_id_seq'::regclass),
+  gateway_id bigint,
+  order_id bigint,
+  transaction_id character varying,
+  type character varying,
+  request_data jsonb,
+  response_data jsonb,
+  status character varying,
+  error_message text,
+  ip_address character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT payment_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT payment_logs_gateway_id_fkey FOREIGN KEY (gateway_id) REFERENCES public.payment_gateways(id)
+);
+CREATE TABLE public.payment_methods (
+  id bigint NOT NULL DEFAULT nextval('payment_methods_id_seq'::regclass),
+  code character varying NOT NULL UNIQUE,
+  name character varying NOT NULL,
+  description text,
+  icon_url text,
+  instructions text,
+  config jsonb,
+  fee_type character varying DEFAULT 'percentage'::character varying,
+  fee_value numeric DEFAULT 0,
+  min_amount numeric,
+  max_amount numeric,
+  is_active boolean DEFAULT true,
+  sort_order integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT payment_methods_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.product_attribute_values (
+  id bigint NOT NULL DEFAULT nextval('product_attribute_values_id_seq'::regclass),
+  product_id bigint,
+  attribute_id bigint,
+  value text,
+  CONSTRAINT product_attribute_values_pkey PRIMARY KEY (id),
+  CONSTRAINT product_attribute_values_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT product_attribute_values_attribute_id_fkey FOREIGN KEY (attribute_id) REFERENCES public.product_attributes(id)
+);
+CREATE TABLE public.product_attributes (
+  id bigint NOT NULL DEFAULT nextval('product_attributes_id_seq'::regclass),
+  name character varying NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  type character varying DEFAULT 'text'::character varying,
+  options jsonb DEFAULT '[]'::jsonb,
+  is_visible boolean DEFAULT true,
+  is_filterable boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_attributes_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.product_bundle_items (
+  id bigint NOT NULL DEFAULT nextval('product_bundle_items_id_seq'::regclass),
+  bundle_id bigint,
+  product_id bigint,
+  quantity integer DEFAULT 1,
+  CONSTRAINT product_bundle_items_pkey PRIMARY KEY (id),
+  CONSTRAINT product_bundle_items_bundle_id_fkey FOREIGN KEY (bundle_id) REFERENCES public.product_bundles(id),
+  CONSTRAINT product_bundle_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.product_bundles (
+  id bigint NOT NULL DEFAULT nextval('product_bundles_id_seq'::regclass),
+  name character varying NOT NULL,
+  description text,
+  discount_type character varying DEFAULT 'percentage'::character varying,
+  discount_value numeric,
+  is_active boolean DEFAULT true,
+  starts_at timestamp with time zone,
+  ends_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_bundles_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.product_comments (
+  id integer NOT NULL DEFAULT nextval('product_comments_id_seq'::regclass),
+  product_id integer NOT NULL,
+  user_id integer NOT NULL,
+  content text NOT NULL,
+  parent_id integer,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT product_comments_pkey PRIMARY KEY (id),
+  CONSTRAINT product_comments_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT product_comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT product_comments_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.product_comments(id)
+);
+CREATE TABLE public.product_files (
+  id bigint NOT NULL DEFAULT nextval('product_files_id_seq'::regclass),
+  product_id bigint,
+  file_name character varying NOT NULL,
+  file_url text NOT NULL,
+  file_size bigint,
+  file_type character varying,
+  version character varying,
+  checksum character varying,
+  download_limit integer DEFAULT '-1'::integer,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_files_pkey PRIMARY KEY (id),
+  CONSTRAINT product_files_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.product_images (
+  id bigint NOT NULL DEFAULT nextval('product_images_id_seq'::regclass),
+  product_id bigint,
+  url text NOT NULL,
+  alt_text character varying,
+  sort_order integer DEFAULT 0,
+  is_primary boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_images_pkey PRIMARY KEY (id),
+  CONSTRAINT product_images_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.product_ratings (
+  id bigint NOT NULL DEFAULT nextval('product_ratings_id_seq'::regclass),
+  product_id bigint UNIQUE,
+  average_rating numeric DEFAULT 0,
+  total_ratings integer DEFAULT 0,
+  rating_1_count integer DEFAULT 0,
+  rating_2_count integer DEFAULT 0,
+  rating_3_count integer DEFAULT 0,
+  rating_4_count integer DEFAULT 0,
+  rating_5_count integer DEFAULT 0,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_ratings_pkey PRIMARY KEY (id),
+  CONSTRAINT product_ratings_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.product_recommendations (
+  id bigint NOT NULL DEFAULT nextval('product_recommendations_id_seq'::regclass),
+  product_id bigint,
+  recommended_product_id bigint,
+  score numeric DEFAULT 0,
+  type character varying DEFAULT 'similar'::character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_recommendations_pkey PRIMARY KEY (id),
+  CONSTRAINT product_recommendations_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT product_recommendations_recommended_product_id_fkey FOREIGN KEY (recommended_product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.product_stats (
+  id bigint NOT NULL DEFAULT nextval('product_stats_id_seq'::regclass),
+  product_id bigint,
+  stat_date date NOT NULL,
+  views integer DEFAULT 0,
+  add_to_cart integer DEFAULT 0,
+  purchases integer DEFAULT 0,
+  revenue numeric DEFAULT 0,
+  CONSTRAINT product_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT product_stats_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.product_tag_relations (
+  product_id bigint NOT NULL,
+  tag_id bigint NOT NULL,
+  CONSTRAINT product_tag_relations_pkey PRIMARY KEY (product_id, tag_id),
+  CONSTRAINT product_tag_relations_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT product_tag_relations_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES public.product_tags(id)
+);
+CREATE TABLE public.product_tags (
+  id bigint NOT NULL DEFAULT nextval('product_tags_id_seq'::regclass),
+  name character varying NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  description text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_tags_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.product_variants (
+  id bigint NOT NULL DEFAULT nextval('product_variants_id_seq'::regclass),
+  product_id bigint,
+  name character varying NOT NULL,
+  sku character varying,
+  price numeric NOT NULL,
+  sale_price numeric,
+  stock_quantity integer DEFAULT '-1'::integer,
+  attributes jsonb DEFAULT '{}'::jsonb,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT product_variants_pkey PRIMARY KEY (id),
+  CONSTRAINT product_variants_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.product_views (
+  id bigint NOT NULL DEFAULT nextval('product_views_id_seq'::regclass),
+  product_id bigint,
+  user_id bigint,
+  session_id character varying,
+  ip_address character varying,
+  user_agent text,
+  referrer text,
+  created_at timestamp with time zone DEFAULT now(),
+  viewed_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT product_views_pkey PRIMARY KEY (id),
+  CONSTRAINT product_views_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT product_views_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.products (
+  id bigint NOT NULL DEFAULT nextval('products_id_seq'::regclass),
+  title character varying NOT NULL,
+  slug character varying UNIQUE,
+  description text,
+  short_description text,
+  price numeric NOT NULL,
+  sale_price numeric,
+  cost_price numeric,
+  category character varying,
+  category_id bigint,
+  demo_url text,
+  download_url text,
+  image_url text,
+  gallery_urls ARRAY,
+  tags ARRAY,
+  sku character varying UNIQUE,
+  stock_quantity integer DEFAULT '-1'::integer,
+  is_active boolean DEFAULT true,
+  is_featured boolean DEFAULT false,
+  is_digital boolean DEFAULT true,
+  average_rating numeric DEFAULT 0,
+  total_ratings integer DEFAULT 0,
+  download_count integer DEFAULT 0,
+  view_count integer DEFAULT 0,
+  sale_count integer DEFAULT 0,
+  meta_title character varying,
+  meta_description text,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  deleted_at timestamp with time zone,
+  file_url character varying,
+  thumbnail character varying,
+  user_id integer,
+  search_vector tsvector,
+  CONSTRAINT products_pkey PRIMARY KEY (id),
+  CONSTRAINT products_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id),
+  CONSTRAINT products_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
+  CONSTRAINT products_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.promotions (
+  id bigint NOT NULL DEFAULT nextval('promotions_id_seq'::regclass),
+  name character varying NOT NULL,
+  description text,
+  type character varying NOT NULL,
+  discount_type character varying,
+  discount_value numeric,
+  conditions jsonb,
+  applicable_products ARRAY,
+  applicable_categories ARRAY,
+  channels ARRAY,
+  is_active boolean DEFAULT true,
+  starts_at timestamp with time zone,
+  ends_at timestamp with time zone,
+  created_by bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  active boolean DEFAULT true,
+  start_date timestamp with time zone,
+  end_date timestamp with time zone,
+  usage_count integer DEFAULT 0,
+  max_uses integer,
+  CONSTRAINT promotions_pkey PRIMARY KEY (id),
+  CONSTRAINT promotions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.purchases (
+  id bigint NOT NULL DEFAULT nextval('purchases_id_seq'::regclass),
+  user_id bigint,
+  product_id bigint,
+  amount numeric NOT NULL,
+  original_price numeric,
+  discount_amount numeric DEFAULT 0,
+  status character varying DEFAULT 'completed'::character varying,
+  payment_method character varying,
+  transaction_id character varying,
+  download_count integer DEFAULT 0,
+  max_downloads integer DEFAULT '-1'::integer,
+  expires_at timestamp with time zone,
+  ip_address character varying,
+  user_agent text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT purchases_pkey PRIMARY KEY (id),
+  CONSTRAINT purchases_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT purchases_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.push_subscriptions (
+  id bigint NOT NULL DEFAULT nextval('push_subscriptions_id_seq'::regclass),
+  user_id bigint,
+  endpoint text NOT NULL,
+  keys jsonb NOT NULL,
+  user_agent text,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT push_subscriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT push_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.rate_limits (
+  id bigint NOT NULL DEFAULT nextval('rate_limits_id_seq'::regclass),
+  key character varying NOT NULL,
+  requests integer DEFAULT 0,
+  window_start timestamp with time zone NOT NULL,
+  window_duration_seconds integer NOT NULL,
+  CONSTRAINT rate_limits_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.referrals (
+  id bigint NOT NULL DEFAULT nextval('referrals_id_seq'::regclass),
+  referrer_id bigint,
+  referred_id bigint,
+  referral_code character varying,
+  status character varying DEFAULT 'pending'::character varying,
+  commission_amount numeric DEFAULT 0,
+  commission_paid boolean DEFAULT false,
+  paid_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT referrals_pkey PRIMARY KEY (id),
+  CONSTRAINT referrals_referrer_id_fkey FOREIGN KEY (referrer_id) REFERENCES public.users(id),
+  CONSTRAINT referrals_referred_id_fkey FOREIGN KEY (referred_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.refunds (
+  id bigint NOT NULL DEFAULT nextval('refunds_id_seq'::regclass),
+  order_id bigint,
+  purchase_id bigint,
+  user_id bigint,
+  amount numeric NOT NULL,
+  reason text,
+  status character varying DEFAULT 'pending'::character varying,
+  refund_method character varying,
+  transaction_id character varying,
+  processed_by bigint,
+  processed_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT refunds_pkey PRIMARY KEY (id),
+  CONSTRAINT refunds_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT refunds_purchase_id_fkey FOREIGN KEY (purchase_id) REFERENCES public.purchases(id),
+  CONSTRAINT refunds_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT refunds_processed_by_fkey FOREIGN KEY (processed_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.review_images (
+  id bigint NOT NULL DEFAULT nextval('review_images_id_seq'::regclass),
+  review_id bigint,
+  url text NOT NULL,
+  caption character varying,
+  sort_order integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT review_images_pkey PRIMARY KEY (id),
+  CONSTRAINT review_images_review_id_fkey FOREIGN KEY (review_id) REFERENCES public.reviews(id)
+);
+CREATE TABLE public.review_reports (
+  id bigint NOT NULL DEFAULT nextval('review_reports_id_seq'::regclass),
+  review_id bigint,
+  user_id bigint,
+  reason character varying NOT NULL,
+  description text,
+  status character varying DEFAULT 'pending'::character varying,
+  resolved_by bigint,
+  resolved_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT review_reports_pkey PRIMARY KEY (id),
+  CONSTRAINT review_reports_review_id_fkey FOREIGN KEY (review_id) REFERENCES public.reviews(id),
+  CONSTRAINT review_reports_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT review_reports_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.review_votes (
+  id bigint NOT NULL DEFAULT nextval('review_votes_id_seq'::regclass),
+  review_id bigint,
+  user_id bigint,
+  is_helpful boolean NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT review_votes_pkey PRIMARY KEY (id),
+  CONSTRAINT review_votes_review_id_fkey FOREIGN KEY (review_id) REFERENCES public.reviews(id),
+  CONSTRAINT review_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.reviews (
+  id bigint NOT NULL DEFAULT nextval('reviews_id_seq'::regclass),
+  user_id bigint,
+  product_id bigint,
+  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  title character varying,
+  comment text,
+  pros text,
+  cons text,
+  helpful_count integer DEFAULT 0,
+  status character varying DEFAULT 'pending'::character varying,
+  is_verified_purchase boolean DEFAULT false,
+  admin_response text,
+  admin_responded_at timestamp with time zone,
+  ip_address character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  images ARRAY,
+  deleted_at timestamp with time zone,
+  CONSTRAINT reviews_pkey PRIMARY KEY (id),
+  CONSTRAINT reviews_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT reviews_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.search_logs (
+  id bigint NOT NULL DEFAULT nextval('search_logs_id_seq'::regclass),
+  query text NOT NULL,
+  results_count integer DEFAULT 0,
+  user_id bigint,
+  session_id character varying,
+  ip_address character varying,
+  filters jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT search_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT search_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.seller_ratings (
+  id bigint NOT NULL DEFAULT nextval('seller_ratings_id_seq'::regclass),
+  seller_id bigint,
+  buyer_id bigint,
+  order_id bigint,
+  rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT seller_ratings_pkey PRIMARY KEY (id),
+  CONSTRAINT seller_ratings_seller_id_fkey FOREIGN KEY (seller_id) REFERENCES public.users(id),
+  CONSTRAINT seller_ratings_buyer_id_fkey FOREIGN KEY (buyer_id) REFERENCES public.users(id),
+  CONSTRAINT seller_ratings_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id)
+);
+CREATE TABLE public.settings (
+  id bigint NOT NULL DEFAULT nextval('settings_id_seq'::regclass),
+  key character varying NOT NULL UNIQUE,
+  value text,
+  type character varying DEFAULT 'string'::character varying,
+  group_name character varying,
+  label character varying,
+  description text,
+  is_public boolean DEFAULT false,
+  updated_by bigint,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT settings_pkey PRIMARY KEY (id),
+  CONSTRAINT settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.slider_items (
+  id bigint NOT NULL DEFAULT nextval('slider_items_id_seq'::regclass),
+  slider_id bigint,
+  title character varying,
+  subtitle character varying,
+  description text,
+  image_url text NOT NULL,
+  mobile_image_url text,
+  link_url text,
+  button_text character varying,
+  sort_order integer DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT slider_items_pkey PRIMARY KEY (id),
+  CONSTRAINT slider_items_slider_id_fkey FOREIGN KEY (slider_id) REFERENCES public.sliders(id)
+);
+CREATE TABLE public.sliders (
+  id bigint NOT NULL DEFAULT nextval('sliders_id_seq'::regclass),
+  name character varying NOT NULL,
+  position character varying,
+  settings jsonb,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT sliders_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.subscription_benefits (
+  id integer NOT NULL DEFAULT nextval('subscription_benefits_id_seq'::regclass),
+  plan character varying NOT NULL UNIQUE,
+  name character varying,
+  description text,
+  discount_percent integer NOT NULL DEFAULT 0,
+  free_downloads integer NOT NULL DEFAULT 0,
+  priority_support boolean DEFAULT false,
+  early_access boolean DEFAULT false,
+  perks jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT subscription_benefits_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.subscription_plans (
+  id bigint NOT NULL DEFAULT nextval('subscription_plans_id_seq'::regclass),
+  name character varying NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  description text,
+  price numeric NOT NULL,
+  billing_cycle character varying DEFAULT 'monthly'::character varying,
+  trial_days integer DEFAULT 0,
+  features jsonb DEFAULT '[]'::jsonb,
+  limits jsonb DEFAULT '{}'::jsonb,
+  is_active boolean DEFAULT true,
+  sort_order integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT subscription_plans_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.subscriptions (
+  id integer NOT NULL DEFAULT nextval('subscriptions_id_seq'::regclass),
+  user_id integer NOT NULL,
+  plan character varying NOT NULL,
+  status character varying NOT NULL DEFAULT 'active'::character varying,
+  start_date timestamp with time zone NOT NULL DEFAULT now(),
+  end_date timestamp with time zone,
+  meta jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT subscriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.support_ticket_messages (
+  id bigint NOT NULL DEFAULT nextval('support_ticket_messages_id_seq'::regclass),
+  ticket_id bigint,
+  user_id bigint,
+  message text NOT NULL,
+  attachments jsonb,
+  is_internal boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT support_ticket_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT support_ticket_messages_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.support_tickets(id),
+  CONSTRAINT support_ticket_messages_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.support_tickets (
+  id bigint NOT NULL DEFAULT nextval('support_tickets_id_seq'::regclass),
+  ticket_number character varying NOT NULL UNIQUE,
+  user_id bigint,
+  subject character varying NOT NULL,
+  category character varying,
+  priority character varying DEFAULT 'medium'::character varying,
+  status character varying DEFAULT 'open'::character varying,
+  assigned_to bigint,
+  order_id bigint,
+  product_id bigint,
+  closed_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  message text NOT NULL DEFAULT ''::text,
+  CONSTRAINT support_tickets_pkey PRIMARY KEY (id),
+  CONSTRAINT support_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT support_tickets_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.users(id),
+  CONSTRAINT support_tickets_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
+  CONSTRAINT support_tickets_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.system_metrics (
+  id bigint NOT NULL DEFAULT nextval('system_metrics_id_seq'::regclass),
+  metric_name character varying NOT NULL,
+  metric_value numeric NOT NULL,
+  tags jsonb,
+  recorded_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT system_metrics_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.system_settings (
+  id integer NOT NULL DEFAULT 1 CHECK (id = 1),
+  site_name character varying DEFAULT 'QtusDev Market'::character varying,
+  site_description text,
+  maintenance_mode boolean DEFAULT false,
+  allow_registration boolean DEFAULT true,
+  require_email_verification boolean DEFAULT true,
+  min_withdrawal_amount numeric DEFAULT 50000,
+  max_withdrawal_amount numeric DEFAULT 50000000,
+  deposit_fee numeric DEFAULT 0,
+  withdrawal_fee numeric DEFAULT 0,
+  smtp_settings jsonb,
+  payment_settings jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT system_settings_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.testimonials (
+  id bigint NOT NULL DEFAULT nextval('testimonials_id_seq'::regclass),
+  author_name character varying NOT NULL,
+  author_title character varying,
+  author_company character varying,
+  author_image text,
+  content text NOT NULL,
+  rating integer,
+  is_featured boolean DEFAULT false,
+  is_active boolean DEFAULT true,
+  sort_order integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT testimonials_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.transactions (
+  id bigint NOT NULL DEFAULT nextval('transactions_id_seq'::regclass),
+  user_id bigint,
+  type character varying NOT NULL,
+  amount numeric NOT NULL,
+  balance_before numeric,
+  balance_after numeric,
+  reference_type character varying,
+  reference_id bigint,
+  description text,
+  status character varying DEFAULT 'completed'::character varying,
+  metadata jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.translations (
+  id bigint NOT NULL DEFAULT nextval('translations_id_seq'::regclass),
+  language_code character varying NOT NULL,
+  key character varying NOT NULL,
+  value text,
+  group_name character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT translations_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.user_activity_logs (
+  id bigint NOT NULL DEFAULT nextval('user_activity_logs_id_seq'::regclass),
+  user_id bigint,
+  action character varying NOT NULL,
+  entity_type character varying,
+  entity_id character varying,
+  old_data jsonb,
+  new_data jsonb,
+  ip_address character varying,
+  user_agent text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_activity_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT user_activity_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_bank_accounts (
+  id bigint NOT NULL DEFAULT nextval('user_bank_accounts_id_seq'::regclass),
+  user_id bigint,
+  bank_name character varying NOT NULL,
+  account_number character varying NOT NULL,
+  account_name character varying NOT NULL,
+  branch character varying,
+  is_default boolean DEFAULT false,
+  is_verified boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_bank_accounts_pkey PRIMARY KEY (id),
+  CONSTRAINT user_bank_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_coupons (
+  id integer NOT NULL DEFAULT nextval('user_coupons_id_seq'::regclass),
+  user_id integer NOT NULL,
+  coupon_id integer NOT NULL,
+  used_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT user_coupons_pkey PRIMARY KEY (id),
+  CONSTRAINT user_coupons_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT user_coupons_coupon_id_fkey FOREIGN KEY (coupon_id) REFERENCES public.coupons(id)
+);
+CREATE TABLE public.user_preferences (
+  id bigint NOT NULL DEFAULT nextval('user_preferences_id_seq'::regclass),
+  user_id bigint UNIQUE,
+  language character varying DEFAULT 'vi'::character varying,
+  timezone character varying DEFAULT 'Asia/Ho_Chi_Minh'::character varying,
+  currency character varying DEFAULT 'VND'::character varying,
+  theme character varying DEFAULT 'system'::character varying,
+  email_notifications boolean DEFAULT true,
+  push_notifications boolean DEFAULT true,
+  sms_notifications boolean DEFAULT false,
+  marketing_emails boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_preferences_pkey PRIMARY KEY (id),
+  CONSTRAINT user_preferences_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_profiles (
+  id bigint NOT NULL DEFAULT nextval('user_profiles_id_seq'::regclass),
+  user_id bigint UNIQUE,
+  phone character varying,
+  address text,
+  city character varying,
+  country character varying,
+  postal_code character varying,
+  date_of_birth date,
+  gender character varying,
+  bio text,
+  social_links jsonb DEFAULT '{}'::jsonb,
+  two_factor_enabled boolean DEFAULT false,
+  two_factor_secret character varying,
+  two_factor_backup_codes ARRAY,
+  preferences jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_role_assignments (
+  id bigint NOT NULL DEFAULT nextval('user_role_assignments_id_seq'::regclass),
+  user_id bigint,
+  role_id bigint,
+  assigned_by bigint,
+  assigned_at timestamp with time zone DEFAULT now(),
+  expires_at timestamp with time zone,
+  CONSTRAINT user_role_assignments_pkey PRIMARY KEY (id),
+  CONSTRAINT user_role_assignments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT user_role_assignments_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.user_roles(id),
+  CONSTRAINT user_role_assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_roles (
+  id bigint NOT NULL DEFAULT nextval('user_roles_id_seq'::regclass),
+  name character varying NOT NULL UNIQUE,
+  description text,
+  permissions jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_roles_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.user_sessions (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id bigint,
+  device_name character varying,
+  device_type character varying,
+  browser character varying,
+  os character varying,
+  ip_address character varying,
+  location character varying,
+  user_agent text,
+  is_current boolean DEFAULT false,
+  is_trusted boolean DEFAULT false,
+  last_activity timestamp with time zone DEFAULT now(),
+  expires_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_stats (
+  id bigint NOT NULL DEFAULT nextval('user_stats_id_seq'::regclass),
+  user_id bigint UNIQUE,
+  total_spent numeric DEFAULT 0,
+  total_orders integer DEFAULT 0,
+  total_reviews integer DEFAULT 0,
+  avg_rating_given numeric,
+  total_referrals integer DEFAULT 0,
+  last_purchase_at timestamp with time zone,
+  first_purchase_at timestamp with time zone,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT user_stats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.users (
+  id bigint NOT NULL DEFAULT nextval('users_id_seq'::regclass),
+  email character varying NOT NULL UNIQUE,
+  username character varying UNIQUE,
+  name character varying,
+  password_hash character varying,
+  avatar_url text,
+  role character varying DEFAULT 'user'::character varying CHECK (role::text = ANY (ARRAY['user'::character varying, 'admin'::character varying, 'moderator'::character varying, 'support'::character varying]::text[])),
+  balance numeric DEFAULT 0.00,
+  status character varying DEFAULT 'active'::character varying CHECK (status::text = ANY (ARRAY['active'::character varying, 'inactive'::character varying, 'suspended'::character varying, 'banned'::character varying]::text[])),
+  provider character varying DEFAULT 'email'::character varying,
+  ip_address character varying,
+  last_login timestamp with time zone,
+  email_verified boolean DEFAULT false,
+  phone_verified boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  deleted_at timestamp with time zone,
+  uid character varying UNIQUE,
+  last_activity timestamp with time zone,
+  login_count integer NOT NULL DEFAULT 0,
+  referral_code character varying,
+  CONSTRAINT users_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.webhooks (
+  id bigint NOT NULL DEFAULT nextval('webhooks_id_seq'::regclass),
+  name character varying NOT NULL,
+  url text NOT NULL,
+  events ARRAY NOT NULL,
+  secret character varying,
+  headers jsonb,
+  is_active boolean DEFAULT true,
+  last_triggered_at timestamp with time zone,
+  success_count integer DEFAULT 0,
+  failure_count integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT webhooks_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.wishlists (
+  id bigint NOT NULL DEFAULT nextval('wishlists_id_seq'::regclass),
+  user_id bigint,
+  product_id bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT wishlists_pkey PRIMARY KEY (id),
+  CONSTRAINT wishlists_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT wishlists_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+);
+CREATE TABLE public.withdrawals (
+  id bigint NOT NULL DEFAULT nextval('withdrawals_id_seq'::regclass),
+  user_id bigint,
+  amount numeric NOT NULL,
+  fee numeric DEFAULT 0,
+  net_amount numeric,
+  bank_name character varying,
+  account_number character varying,
+  account_name character varying,
+  user_email character varying,
+  status character varying DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'processing'::character varying]::text[])),
+  approved_by character varying,
+  approved_time timestamp with time zone,
+  rejected_reason text,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT withdrawals_pkey PRIMARY KEY (id),
+  CONSTRAINT withdrawals_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);

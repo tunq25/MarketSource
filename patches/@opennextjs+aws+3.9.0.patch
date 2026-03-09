@@ -1,0 +1,35 @@
+diff --git a/node_modules/@opennextjs/aws/dist/build/helper.js b/node_modules/@opennextjs/aws/dist/build/helper.js
+index a2d81f3..8227f62 100644
+--- a/node_modules/@opennextjs/aws/dist/build/helper.js
++++ b/node_modules/@opennextjs/aws/dist/build/helper.js
+@@ -263,8 +263,13 @@ export function compareSemver(v1, operator, v2) {
+     }
+ }
+ export function copyOpenNextConfig(inputDir, outputDir, isEdge = false) {
+-    // Copy open-next.config.mjs
+-    fs.copyFileSync(path.join(inputDir, isEdge ? "open-next.config.edge.mjs" : "open-next.config.mjs"), path.join(outputDir, "open-next.config.mjs"));
++    const preferredPath = path.join(inputDir, isEdge ? "open-next.config.edge.mjs" : "open-next.config.mjs");
++    const fallbackPath = path.join(inputDir, "open-next.config.mjs");
++    const sourcePath = fs.existsSync(preferredPath) ? preferredPath : fallbackPath;
++    if (!fs.existsSync(sourcePath)) {
++        throw new Error(`Missing OpenNext config file at ${preferredPath}`);
++    }
++    fs.copyFileSync(sourcePath, path.join(outputDir, "open-next.config.mjs"));
+ }
+ export function copyEnvFile(appPath, packagePath, outputPath) {
+     const baseAppPath = path.join(appPath, ".next/standalone", packagePath);
+@@ -307,7 +312,13 @@ export function initOutputDir(options) {
+     fs.rmSync(options.outputDir, { recursive: true, force: true });
+     const { buildDir } = options;
+     fs.mkdirSync(buildDir, { recursive: true });
+-    fs.cpSync(options.tempBuildDir, buildDir, { recursive: true });
++    if (fs.existsSync(options.tempBuildDir)) {
++        for (const entry of fs.readdirSync(options.tempBuildDir)) {
++            const sourceEntry = path.join(options.tempBuildDir, entry);
++            const targetEntry = path.join(buildDir, entry);
++            fs.cpSync(sourceEntry, targetEntry, { recursive: true });
++        }
++    }
+ }
+ /**
+  * @returns Whether the edge runtime is used
