@@ -60,7 +60,10 @@ export async function verifyFirebaseToken(
     // 4. IP trong whitelist (nếu được set)
     const EMAIL_AUTH_IP_WHITELIST = process.env.EMAIL_AUTH_IP_WHITELIST?.split(',').map(ip => ip.trim()) || [];
     const clientIP = getClientIP(request);
-    const isIPAllowed = EMAIL_AUTH_IP_WHITELIST.length === 0 || EMAIL_AUTH_IP_WHITELIST.includes(clientIP);
+
+    // ✅ FIX: Tự động cho phép localhost trong môi trường development
+    const isLocalhost = clientIP === '127.0.0.1' || clientIP === '::1' || clientIP === '::ffff:127.0.0.1';
+    const isIPAllowed = (IS_DEVELOPMENT && isLocalhost) || EMAIL_AUTH_IP_WHITELIST.length === 0 || EMAIL_AUTH_IP_WHITELIST.includes(clientIP);
 
     const canUseEmailAuth = ALLOW_EMAIL_AUTH && IS_DEVELOPMENT &&
       (!EMAIL_AUTH_SECRET || emailAuthSecret === EMAIL_AUTH_SECRET) &&

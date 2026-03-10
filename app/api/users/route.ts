@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     // ✅ FIX: Get all users với proper format
     const result = await query<any>(
-      'SELECT id, email, name, username, avatar_url, balance, role, created_at, updated_at, ip_address FROM users ORDER BY created_at DESC'
+      'SELECT id, email, name, username, avatar_url, balance, role, created_at, updated_at, ip_address FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC'
     )
 
     // ✅ FIX: Trả về cả 'users' và 'data' để tương thích với cả hai format

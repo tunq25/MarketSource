@@ -419,8 +419,9 @@ const ensureUserProfilesTable = async () => {
 
 export async function getUserById(userId: number) {
   try {
-    const result = await pool.query(
-      'SELECT * FROM users WHERE id = $1',
+    const instance = getPool();
+    const result = await instance.query(
+      'SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL',
       [userId]
     );
     return result.rows[0] || null;
@@ -432,8 +433,9 @@ export async function getUserById(userId: number) {
 
 export async function getUserByEmail(email: string) {
   try {
-    const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
+    const instance = getPool();
+    const result = await instance.query(
+      'SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL',
       [email]
     );
     return result.rows[0] || null;
@@ -445,8 +447,9 @@ export async function getUserByEmail(email: string) {
 
 export async function getUserIdByEmail(email: string): Promise<number | null> {
   try {
-    const result = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
+    const instance = getPool();
+    const result = await instance.query(
+      'SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL',
       [email]
     );
     return result.rows.length > 0 ? result.rows[0].id : null;
@@ -1142,7 +1145,8 @@ export async function approveWithdrawalAndUpdateBalance(
       throw new Error('User ID mismatch with withdrawal');
     }
 
-    if (parseFloat(withdrawal.amount) !== amount) {
+    // ✅ FIX: So sánh amount với epsilon cho PostgreSQL decimal
+    if (Math.abs(parseFloat(withdrawal.amount) - Number(amount)) > 0.01) {
       throw new Error('Amount mismatch with withdrawal');
     }
 
@@ -1243,48 +1247,7 @@ export async function createPurchase(purchaseData: {
 
     await client.query('BEGIN');
 
-    // ✅ FIX: Check product tồn tại và is_active
-    const productResult = await client.query(
-      'SELECT id, price, is_active FROM products WHERE id = $1',
-      [productIdNum]
-    );
-
-    if (productResult.rows.length === 0) {
-      throw new Error('Product not found');
-    }
-
-    const product = productResult.rows[0];
-
-    if (!product.is_active) {
-      throw new Error('Product is not available');
-    }
-
-    // ✅ FIX: Validate amount >= product price (cho phép quantity > 1)
-    // Amount có thể lớn hơn product.price nếu quantity > 1
-    if (parseFloat(product.price) > purchaseData.amount) {
-      throw new Error('Amount must be at least equal to product price');
-    }
-
-    // ✅ FIX: Validate amount là bội số của product.price (nếu có quantity)
-    // Cho phép sai số nhỏ do floating point
-    const expectedQuantity = Math.round(purchaseData.amount / parseFloat(product.price));
-    const expectedAmount = expectedQuantity * parseFloat(product.price);
-    if (Math.abs(purchaseData.amount - expectedAmount) > 0.01) {
-      throw new Error('Amount must be a multiple of product price');
-    }
-
-    // ✅ FIX: Check user đã mua sản phẩm này chưa (optional - tùy business logic)
-    // Nếu muốn cho phép mua lại, comment đoạn này
-    const existingPurchase = await client.query(
-      'SELECT id FROM purchases WHERE user_id = $1 AND product_id = $2',
-      [dbUserId, productIdNum]
-    );
-
-    if (existingPurchase.rows.length > 0) {
-      throw new Error('You have already purchased this product');
-    }
-
-    // ✅ FIX: Lock user row để tránh race condition
+    // 1. Lock user row để tránh race condition tài chính và mua trùng
     const userResult = await client.query(
       'SELECT balance FROM users WHERE id = $1 FOR UPDATE',
       [dbUserId]
@@ -1295,41 +1258,60 @@ export async function createPurchase(purchaseData: {
     }
 
     const currentBalance = parseFloat(userResult.rows[0].balance || '0');
-    const newBalance = currentBalance - purchaseData.amount;
 
-    if (newBalance < 0) {
-      throw new Error('Insufficient balance');
+    // 2. Check xem đã mua sản phẩm này chưa (Tránh race condition mua trùng)
+    const existingPurchase = await client.query(
+      'SELECT id FROM purchases WHERE user_id = $1 AND product_id = $2',
+      [dbUserId, productIdNum]
+    );
+
+    if (existingPurchase.rows.length > 0) {
+      throw new Error('Bạn đã mua sản phẩm này rồi');
     }
 
-    // Create purchase record
+    // 3. Lấy thông tin sản phẩm
+    const productResult = await client.query(
+      'SELECT id, price, is_active FROM products WHERE id = $1 AND deleted_at IS NULL',
+      [productIdNum]
+    );
+
+    if (productResult.rows.length === 0) {
+      throw new Error('Sản phẩm không tồn tại hoặc đã bị xóa');
+    }
+
+    const product = productResult.rows[0];
+
+    if (!product.is_active) {
+      throw new Error('Sản phẩm hiện không còn khả dụng');
+    }
+
+    const price = parseFloat(product.price);
+    const finalPurchasePrice = price; // Mặc định mua 1 bản
+
+    // 4. Kiểm tra số dư
+    if (currentBalance < finalPurchasePrice) {
+      throw new Error(`Số dư không đủ. Cần ${finalPurchasePrice.toLocaleString('vi-VN')}đ, hiện có ${currentBalance.toLocaleString('vi-VN')}đ`);
+    }
+
+    const newBalance = currentBalance - finalPurchasePrice;
+
+    // 5. Tạo bản ghi mua hàng
     const purchaseResult = await client.query(
       'INSERT INTO purchases (user_id, product_id, amount) VALUES ($1, $2, $3) RETURNING id',
-      [dbUserId, productIdNum, purchaseData.amount]
+      [dbUserId, productIdNum, finalPurchasePrice]
     );
 
-    // ✅ FIX: Atomic balance update với WHERE condition để tránh race condition
-    // Chỉ update nếu balance >= amount (double-check)
-    const updateResult = await client.query(
+    // 6. Cập nhật số dư atomically
+    await client.query(
       'UPDATE users SET balance = balance - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND balance >= $1',
-      [purchaseData.amount, dbUserId]
+      [finalPurchasePrice, dbUserId]
     );
-
-    if (updateResult.rowCount === 0) {
-      throw new Error('Insufficient balance or user not found');
-    }
-
-    // Get updated balance
-    const updatedUserResult = await client.query(
-      'SELECT balance FROM users WHERE id = $1',
-      [dbUserId]
-    );
-    const finalBalance = parseFloat(updatedUserResult.rows[0].balance || '0');
 
     await client.query('COMMIT');
 
     return {
       id: Number(purchaseResult.rows[0].id),
-      newBalance: finalBalance,
+      newBalance: newBalance,
     };
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1407,7 +1389,7 @@ export async function getProducts(filters?: {
       ${hasDownloadCount ? ', COALESCE(p.download_count, 0) as download_count' : ', 0 as download_count'}
       FROM products p
       LEFT JOIN product_ratings pr ON p.id = pr.product_id
-      WHERE 1=1
+      WHERE p.deleted_at IS NULL
     `;
     const params: any[] = [];
     let paramIndex = 1;
@@ -1480,7 +1462,7 @@ export async function getProductById(productId: number) {
       ${hasDownloadCount ? ', COALESCE(p.download_count, 0) as download_count' : ', 0 as download_count'}
       FROM products p
       LEFT JOIN product_ratings pr ON p.id = pr.product_id
-      WHERE p.id = $1
+      WHERE p.id = $1 AND p.deleted_at IS NULL
     `;
 
     const result = await pool.query(query, [productId]);

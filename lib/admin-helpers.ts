@@ -195,7 +195,7 @@ export function onUsersChange(callback: (users: any[]) => void): () => void {
 
   listeners.get(key)!.add(callback);
 
-  // Call immediately với data hiện tại
+  // ✅ FIX: Chỉ call immediately nếu cache không có hoặc quá hạn (UserManager đã có cache riêng nên gọi getAllUsers trực tiếp)
   userManager.getAllUsers().then(callback).catch(err => logger.error('Error getting users', err));
 
   return () => {
@@ -222,8 +222,13 @@ export function onDepositsChange(callback: (deposits: any[]) => void): () => voi
 
   listeners.get(key)!.add(callback);
 
-  // Call immediately với data hiện tại
-  loadDepositsAndWithdrawals().then(() => callback(cacheDeposits)).catch(err => logger.error('Error getting deposits', err));
+  // ✅ FIX: Chỉ fetch ngay lập tức nếu cache hết hạn
+  const now = Date.now();
+  if (now - lastDepositsUpdate < CACHE_TTL && cacheDeposits.length > 0) {
+    callback([...cacheDeposits]);
+  } else {
+    loadDepositsAndWithdrawals().then(() => callback([...cacheDeposits])).catch(err => logger.error('Error getting deposits', err));
+  }
 
   return () => {
     const callbacks = listeners.get(key);
@@ -249,8 +254,13 @@ export function onWithdrawalsChange(callback: (withdrawals: any[]) => void): () 
 
   listeners.get(key)!.add(callback);
 
-  // Call immediately với data hiện tại
-  loadDepositsAndWithdrawals().then(() => callback(cacheWithdrawals)).catch(err => logger.error('Error getting withdrawals', err));
+  // ✅ FIX: Chỉ fetch ngay lập tức nếu cache hết hạn
+  const now = Date.now();
+  if (now - lastWithdrawalsUpdate < CACHE_TTL && cacheWithdrawals.length > 0) {
+    callback([...cacheWithdrawals]);
+  } else {
+    loadDepositsAndWithdrawals().then(() => callback([...cacheWithdrawals])).catch(err => logger.error('Error getting withdrawals', err));
+  }
 
   return () => {
     const callbacks = listeners.get(key);

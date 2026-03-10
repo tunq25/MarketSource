@@ -97,10 +97,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ✅ FIX: Validate amount match với withdrawal (Ép kiểu Number vì DB rút tiền có thể bị trả về dạng mã Decimal)
-      if (Number(withdrawal.amount) !== Number(amount)) {
+      // ✅ FIX: Validate amount match với withdrawal (Sử dụng epsilon comparison để tránh sai lệch định dạng Decimal từ DB)
+      const dbAmount = Number(withdrawal.amount);
+      const reqAmount = Number(amount);
+
+      if (Math.abs(dbAmount - reqAmount) > 0.01) {
+        const { logger } = await import('@/lib/logger');
+        logger.warn('Withdrawal amount mismatch', { withdrawalId, dbAmount, reqAmount });
         return NextResponse.json(
-          { success: false, error: 'Amount mismatch with withdrawal' },
+          { success: false, error: `Amount mismatch with withdrawal. DB: ${dbAmount}, Req: ${reqAmount}` },
           { status: 400 }
         );
       }

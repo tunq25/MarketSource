@@ -97,10 +97,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ✅ FIX: Validate amount match với deposit (Ép kiểu Number vì DB có thể trả dề dạng chuỗi Decimal '100000.00')
-      if (Number(deposit.amount) !== Number(amount)) {
+      // ✅ FIX: Validate amount match với deposit (Sử dụng epsilon comparison để tránh sai lệch định dạng Decimal từ DB)
+      const dbAmount = Number(deposit.amount);
+      const reqAmount = Number(amount);
+
+      if (Math.abs(dbAmount - reqAmount) > 0.01) {
+        const { logger } = await import('@/lib/logger');
+        logger.warn('Deposit amount mismatch', { depositId, dbAmount, reqAmount });
         return NextResponse.json(
-          { success: false, error: 'Amount mismatch with deposit' },
+          { success: false, error: `Amount mismatch with deposit. DB: ${dbAmount}, Req: ${reqAmount}` },
           { status: 400 }
         );
       }

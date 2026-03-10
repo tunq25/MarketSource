@@ -439,15 +439,11 @@ function AdminPageContent() {
         }
       };
 
-      // ✅ FIX: Load data in parallel để tối ưu performance
-      Promise.all([
-        loadDeposits(),
-        loadWithdrawals(),
-        loadPurchases(),
-      ]).catch(async (error) => {
-        const { logger } = await import('@/lib/logger');
-        logger.error('Error loading admin data in parallel', error);
-      });
+      // ✅ FIX: Đã gỡ bỏ explicit Promise.all load data lúc mount vì on...Change listeners 
+      // đã tự động gọi loadData khi được đăng ký. Điều này giúp tránh spam API (429).
+
+      // Load purchases from database (vẫn cần load vì listenPurchases không tự load data nếu cache còn hạn)
+      loadPurchases();
 
       // Stub listeners (no-op)
       const unsubscribeDeposits = onDepositsChange(() => { });

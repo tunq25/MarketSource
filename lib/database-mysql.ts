@@ -251,7 +251,7 @@ export async function withTransaction<T>(fn: (conn: PoolConnection) => Promise<T
 
 export async function getUserByIdMySQL(userId: number) {
   try {
-    return await queryOne<any>("SELECT * FROM users WHERE id = ?", [userId])
+    return await queryOne<any>("SELECT * FROM users WHERE id = ? AND deleted_at IS NULL", [userId])
   } catch (err) {
     logger.error("MySQL: getUserById error", err, { userId })
     throw err
@@ -260,7 +260,7 @@ export async function getUserByIdMySQL(userId: number) {
 
 export async function getUserByEmailMySQL(email: string) {
   try {
-    return await queryOne<any>("SELECT * FROM users WHERE email = ?", [email])
+    return await queryOne<any>("SELECT * FROM users WHERE email = ? AND deleted_at IS NULL", [email])
   } catch (err) {
     logger.error("MySQL: getUserByEmail error", err, { email })
     throw err
@@ -269,7 +269,7 @@ export async function getUserByEmailMySQL(email: string) {
 
 export async function getUserIdByEmailMySQL(email: string): Promise<number | null> {
   try {
-    const row = await queryOne<any>("SELECT id FROM users WHERE email = ?", [email])
+    const row = await queryOne<any>("SELECT id FROM users WHERE email = ? AND deleted_at IS NULL", [email])
     return row ? Number(row.id) : null
   } catch (err) {
     logger.error("MySQL: getUserIdByEmail error", err, { email })
@@ -288,7 +288,7 @@ export async function createOrUpdateUserMySQL(userData: {
 }) {
   try {
     // ✅ Check nếu user đã tồn tại
-    const existing = await queryOne<any>("SELECT id, username FROM users WHERE email = ?", [userData.email])
+    const existing = await queryOne<any>("SELECT id, username FROM users WHERE email = ? AND deleted_at IS NULL", [userData.email])
 
     if (existing) {
       // ✅ FIX CRITICAL: Chỉ UPDATE các field được truyền vào, KHÔNG ghi đè password_hash thành null
@@ -763,57 +763,63 @@ export async function createPurchaseMySQL(purchaseData: {
         ? purchaseData.productId
         : parseInt(purchaseData.productId.toString(), 10)
 
-    const [prdRows]: any = await conn.query(
-      "SELECT id, price, is_active FROM products WHERE id = ?",
-      [productIdNum],
-    )
-    const product = prdRows[0]
-    if (!product) throw new Error("Product not found")
-    if (!product.is_active) throw new Error("Product is not available")
-
-    const price = Number(product.price)
-    // ✅ FIX: Luôn mua với giá từ Database (đảm bảo atomic và ko tin client amount)
-    const finalPurchasePrice = price
-
-    // ✅ FIX: Chỉ check số dư, không cần multiple of product price vì code thường mua 1 bản
+    // 1. Lock user row và lấy balance mới nhất
     const [userRows]: any = await conn.query(
-      "SELECT balance FROM users WHERE id = ? FOR UPDATE",
+      "SELECT id, balance FROM users WHERE id = ? FOR UPDATE",
       [dbUserId],
     )
     const currentBalance = Number(userRows[0]?.balance || 0)
+
+    // 2. Check xem đã mua chưa (Tránh race condition mua trùng)
+    const [existingRes]: any = await conn.query(
+      "SELECT id FROM purchases WHERE user_id = ? AND product_id = ?",
+      [dbUserId, productIdNum]
+    );
+    if (existingRes && existingRes.length > 0) {
+      throw new Error("Bạn đã mua sản phẩm này rồi");
+    }
+
+    // 3. Lấy thông tin sản phẩm
+    const [prdRows]: any = await conn.query(
+      "SELECT id, price, is_active FROM products WHERE id = ? AND deleted_at IS NULL",
+      [productIdNum],
+    )
+    const product = prdRows[0]
+    if (!product) throw new Error("Sản phẩm không tồn tại hoặc đã bị xóa")
+    if (!product.is_active) throw new Error("Sản phẩm hiện không còn khả dụng")
+
+    const price = Number(product.price)
+    const finalPurchasePrice = price
+
+    // 4. Kiểm tra số dư
     if (currentBalance < finalPurchasePrice) {
-      throw new Error(`Insufficient balance. Cần ${finalPurchasePrice.toLocaleString('vi-VN')}đ, hiện có ${currentBalance.toLocaleString('vi-VN')}đ`)
+      throw new Error(`Số dư không đủ. Cần ${finalPurchasePrice.toLocaleString('vi-VN')}đ, hiện có ${currentBalance.toLocaleString('vi-VN')}đ`)
     }
 
     let purchaseId: number;
 
+    // 5. Tạo bản ghi mua hàng
     if (usePostgresBridge) {
-      // In Postgres bridge, conn.query wraps client.query, but it may return fake rows/fields.
-      // So returning id works since we set `insertId` on fakeResult in bridge mode if there is a RETURNING clause. 
-      // Also, we can use conn.query with RETURNING logic, though it's safer to use query method directly or check fakeResult.
       const result = await query(
         "INSERT INTO purchases (user_id, product_id, amount, created_at) VALUES (?, ?, ?, NOW()) RETURNING id",
-        [dbUserId, productIdNum, purchaseData.amount]
+        [dbUserId, productIdNum, finalPurchasePrice]
       )
       purchaseId = result[0]?.id;
     } else {
       const [pRows]: any = await conn.query(
         "INSERT INTO purchases (user_id, product_id, amount, created_at) VALUES (?, ?, ?, NOW())",
-        [dbUserId, productIdNum, purchaseData.amount],
+        [dbUserId, productIdNum, finalPurchasePrice],
       )
       purchaseId = (pRows as any).insertId;
     }
 
+    // 6. Cập nhật số dư atomically
     await conn.query(
       "UPDATE users SET balance = balance - ?, updated_at = NOW() WHERE id = ? AND balance >= ?",
       [finalPurchasePrice, dbUserId, finalPurchasePrice],
     )
 
-    const [after]: any = await conn.query(
-      "SELECT balance FROM users WHERE id = ?",
-      [dbUserId],
-    )
-    const finalBalance = Number(after[0]?.balance || 0)
+    const finalBalance = currentBalance - finalPurchasePrice
 
     return { id: Number(purchaseId), newBalance: finalBalance }
   })
@@ -833,7 +839,7 @@ export async function getProductsMySQL(filters?: {
              COALESCE(p.download_count, 0) AS download_count
       FROM products p
       LEFT JOIN product_ratings pr ON p.id = pr.product_id
-      WHERE 1=1
+      WHERE p.deleted_at IS NULL
     `
     const params: any[] = []
 
@@ -871,7 +877,7 @@ export async function getProductByIdMySQL(productId: number) {
              COALESCE(p.download_count, 0) AS download_count
       FROM products p
       LEFT JOIN product_ratings pr ON p.id = pr.product_id
-      WHERE p.id = ?
+      WHERE p.id = ? AND p.deleted_at IS NULL
     `
     return await queryOne<any>(sql, [productId])
   } catch (err) {
@@ -1868,6 +1874,10 @@ export async function getReferralsMySQL(referrerId: number) {
 
 export async function createReferralMySQL(referrerId: number, referredId: number) {
   try {
+    if (Number(referrerId) === Number(referredId)) {
+      throw new Error("Bạn không thể tự giới thiệu chính mình");
+    }
+
     let insertId: number;
 
     if (usePostgresBridge) {
