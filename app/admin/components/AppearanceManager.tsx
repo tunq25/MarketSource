@@ -833,6 +833,15 @@ export function AppearanceManager() {
                         {icons.reset} Reset
                     </button>
                     <button
+                        onClick={() => setShowPreview(!showPreview)}
+                        className={`px-3 py-2 text-sm rounded-lg border transition-all flex items-center gap-1.5 ${showPreview
+                                ? 'border-purple-500 text-purple-400 bg-purple-500/10'
+                                : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+                            }`}
+                    >
+                        {icons.eye} {showPreview ? 'Ẩn Preview' : 'Xem trước'}
+                    </button>
+                    <button
                         onClick={loadSettings}
                         disabled={isSaving}
                         className="px-3 py-2 text-sm rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-all flex items-center gap-1.5"
@@ -843,8 +852,8 @@ export function AppearanceManager() {
                         onClick={handleSave}
                         disabled={isSaving || !hasChanges}
                         className={`px-5 py-2 text-sm rounded-lg font-medium flex items-center gap-2 transition-all ${hasChanges
-                                ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-600/20"
-                                : "bg-gray-800 text-gray-500 cursor-not-allowed"
+                            ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-600/20"
+                            : "bg-gray-800 text-gray-500 cursor-not-allowed"
                             }`}
                     >
                         {isSaving ? (
@@ -875,8 +884,8 @@ export function AppearanceManager() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id
-                                        ? "bg-purple-600/20 text-purple-400 border border-purple-500/30"
-                                        : "text-gray-400 hover:text-white hover:bg-gray-800/60"
+                                    ? "bg-purple-600/20 text-purple-400 border border-purple-500/30"
+                                    : "text-gray-400 hover:text-white hover:bg-gray-800/60"
                                     }`}
                             >
                                 {tab.icon}
@@ -893,6 +902,93 @@ export function AppearanceManager() {
                     </div>
                 </div>
             </div>
+
+            {/* ═══════════ LIVE WEBSITE PREVIEW ═══════════ */}
+            {showPreview && (
+                <div className="mt-6 border border-gray-700 rounded-2xl overflow-hidden bg-gray-900/80">
+                    <div className="flex items-center justify-between px-4 py-2 bg-gray-800/80 border-b border-gray-700">
+                        <div className="flex items-center gap-2">
+                            <div className="flex gap-1.5">
+                                <div className="w-3 h-3 rounded-full bg-red-500" />
+                                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                                <div className="w-3 h-3 rounded-full bg-green-500" />
+                            </div>
+                            <span className="text-[11px] text-gray-500 ml-2">Live Preview — {settings.siteName}</span>
+                        </div>
+                        <button onClick={() => setShowPreview(false)} className="text-gray-500 hover:text-white text-xs">✕ Đóng</button>
+                    </div>
+
+                    {/* Preview Content */}
+                    <div style={{ backgroundColor: settings.backgroundColor, color: settings.textColor, fontFamily: settings.bodyFont, fontSize: `${settings.baseFontSize}px` }} className="min-h-[400px]">
+                        {/* Navbar Preview */}
+                        <nav style={{ backgroundColor: settings.surfaceColor, borderBottom: `1px solid ${settings.borderColor}` }} className="px-6 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${settings.primaryColor}, ${settings.secondaryColor})` }}>
+                                    <span className="text-white text-xs font-bold">Q</span>
+                                </div>
+                                <span style={{ fontFamily: settings.headingFont, fontWeight: parseInt(settings.headingWeight), color: settings.textColor }} className="text-base">
+                                    {settings.siteName}
+                                </span>
+                            </div>
+                            <div className="flex gap-4" style={{ color: settings.mutedTextColor }}>
+                                <span className="text-xs hover:opacity-80 cursor-default">Trang chủ</span>
+                                <span className="text-xs hover:opacity-80 cursor-default">Sản phẩm</span>
+                                <span className="text-xs hover:opacity-80 cursor-default">Danh mục</span>
+                                <span className="text-xs hover:opacity-80 cursor-default">Hỗ trợ</span>
+                            </div>
+                        </nav>
+
+                        {/* Hero Preview */}
+                        <div className="px-8 py-12 text-center" style={{
+                            background: settings.heroBgType === 'gradient'
+                                ? `linear-gradient(135deg, ${settings.primaryColor}22, ${settings.secondaryColor}22, ${settings.accentColor}11)`
+                                : settings.heroBgType === 'solid' ? settings.heroBgColor : undefined,
+                        }}>
+                            <h1 style={{ fontFamily: settings.headingFont, fontWeight: parseInt(settings.headingWeight), color: settings.textColor, fontSize: `${parseInt(settings.baseFontSize) + 12}px` }} className="mb-3">
+                                {settings.heroTitle || 'Tiêu đề Hero'}
+                            </h1>
+                            <p style={{ color: settings.mutedTextColor }} className="mb-5 max-w-lg mx-auto text-sm">
+                                {settings.heroSubtitle || 'Mô tả subtitle của hero section'}
+                            </p>
+                            <button className="px-5 py-2.5 rounded-lg text-white text-sm font-medium" style={{
+                                background: `linear-gradient(135deg, ${settings.primaryColor}, ${settings.secondaryColor})`,
+                                borderRadius: `${settings.borderRadius}px`,
+                            }}>
+                                {settings.heroButtonText || 'CTA Button'}
+                            </button>
+                        </div>
+
+                        {/* Cards Preview */}
+                        <div className="px-8 py-6">
+                            <h3 style={{ fontFamily: settings.headingFont, fontWeight: parseInt(settings.headingWeight), color: settings.textColor }} className="text-sm mb-4">Sản phẩm nổi bật</h3>
+                            <div className="grid grid-cols-3 gap-3">
+                                {['Website Template', 'Dashboard UI', 'Mobile App'].map((title, i) => (
+                                    <div key={i} style={{
+                                        backgroundColor: settings.cardStyle === 'glass' ? `${settings.surfaceColor}CC` : settings.surfaceColor,
+                                        border: `1px solid ${settings.borderColor}`,
+                                        borderRadius: `${settings.borderRadius}px`,
+                                        backdropFilter: settings.cardStyle === 'glass' ? 'blur(8px)' : 'none',
+                                        boxShadow: settings.cardStyle === 'shadow' ? '0 4px 20px rgba(0,0,0,0.2)' : 'none',
+                                    }} className="p-3">
+                                        <div className="w-full h-16 rounded-md mb-2" style={{ background: `linear-gradient(135deg, ${settings.primaryColor}33, ${settings.accentColor}33)` }} />
+                                        <p style={{ color: settings.textColor, fontFamily: settings.headingFont }} className="text-xs font-medium">{title}</p>
+                                        <p style={{ color: settings.mutedTextColor }} className="text-[10px] mt-1">{[299000, 499000, 199000][i].toLocaleString('vi-VN')}đ</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Footer Preview */}
+                        <div style={{ backgroundColor: settings.surfaceColor, borderTop: `1px solid ${settings.borderColor}` }} className="px-8 py-4 flex justify-between items-center">
+                            <p style={{ color: settings.mutedTextColor }} className="text-[10px]">{settings.footerText}</p>
+                            <div className="flex gap-3">
+                                <span style={{ color: settings.mutedTextColor }} className="text-[10px]">{settings.contactEmail}</span>
+                                <span style={{ color: settings.mutedTextColor }} className="text-[10px]">{settings.contactPhone}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

@@ -1,14 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { MessageCircle, Send, Search, User, Clock } from "lucide-react"
+import { MessageCircle, Send, Search, User, Clock, Check, CheckCheck, Bot, UserCog, Sparkles } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
 import { logger } from "@/lib/logger-client"
 
@@ -16,6 +15,7 @@ interface Message {
   id: number
   message: string
   isAdmin: boolean
+  senderType?: 'user' | 'admin' | 'ai'
   createdAt: string
   user_name?: string
   user_email?: string
@@ -41,46 +41,12 @@ export function ChatAdmin() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  useEffect(() => {
-    loadChatUsers()
-    
-    // ✅ Realtime polling mỗi 2 giây để load danh sách users và messages
-    pollingIntervalRef.current = setInterval(() => {
-      loadChatUsers()
-      if (selectedUserId) {
-        loadChatMessages(selectedUserId)
-      }
-    }, 2000)
-
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current)
-      }
-    }
-  }, [selectedUserId])
-
-  useEffect(() => {
-    // Scroll to bottom khi có tin nhắn mới
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
-    }
-  }, [messages])
-
-  const loadChatUsers = async () => {
+  const loadChatUsers = useCallback(async () => {
     try {
-      // ✅ Get all chats để lấy danh sách users đã chat
-      // Admin có thể xem tất cả chats nên không cần userId param
       const result = await apiGet('/api/chat')
-      
-      // ✅ Handle API response errors
-      if (!result || !result.success) {
-        console.warn('Chat API returned error:', result?.error)
-        return
-      }
-      
-      const allMessages = result.messages || []
+      if (!result || !result.success) return
 
-      // Group messages by user_id
+      const allMessages = result.messages || []
       const userMap = new Map<number, ChatUser>()
 
       allMessages.forEach((msg: any) => {
@@ -97,19 +63,15 @@ export function ChatAdmin() {
         }
 
         const user = userMap.get(userId)!
-        
-        // Update last message
         const msgTime = new Date(msg.created_at || msg.createdAt || msg.timestamp).getTime()
         const lastTime = user.lastMessageTime ? new Date(user.lastMessageTime).getTime() : 0
-        
+
         if (msgTime > lastTime) {
           user.lastMessage = msg.message || msg.content || ''
           user.lastMessageTime = msg.created_at || msg.createdAt || msg.timestamp
         }
 
-        // ✅ Count unread (messages from user, not admin) - chỉ count nếu chưa đọc
         if (!msg.is_admin && !msg.isAdmin) {
-          // Chỉ tăng unread nếu message mới hơn last seen
           const lastSeenKey = `lastSeen_${userId}`
           const lastSeen = localStorage.getItem(lastSeenKey)
           if (!lastSeen || msgTime > parseInt(lastSeen)) {
@@ -118,107 +80,75 @@ export function ChatAdmin() {
         }
       })
 
-      const users = Array.from(userMap.values())
-        .sort((a, b) => {
-          const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0
-          const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0
-          return timeB - timeA // Most recent first
-        })
-
-      setChatUsers(users)
-    } catch (error: any) {
-      // ✅ Better error handling
-      if (error.message?.includes('Unauthorized')) {
-        console.warn('Chat: Admin not authenticated')
-      } else {
-        logger.error('Error loading chat users:', error)
-      }
+      setChatUsers(Array.from(userMap.values()).sort((a, b) => {
+        const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0
+        const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0
+        return timeB - timeA
+      }))
+    } catch (error) {
+      console.error('Error loading users', error)
     }
-  }
+  }, [])
 
-  const loadChatMessages = async (userId: number) => {
+  const loadChatMessages = useCallback(async (userId: number) => {
     try {
       const result = await apiGet(`/api/chat?userId=${userId}`)
-      
-      // ✅ Handle API response errors
-      if (!result || !result.success) {
-        console.warn('Chat API returned error:', result?.error)
-        return
-      }
-      
-      const chatMessages = result.messages || []
+      if (!result || !result.success) return
 
+      const chatMessages = result.messages || []
       const mappedMessages: Message[] = chatMessages.map((m: any) => ({
         id: m.id,
-        message: m.message || m.content || '',
-        isAdmin: m.is_admin || m.isAdmin || false,
+        message: m.message || '',
+        isAdmin: m.senderType === 'admin' || m.senderType === 'ai' || m.isAdmin === true || m.is_admin === true,
+        senderType: m.senderType,
         createdAt: m.created_at || m.createdAt || new Date().toISOString(),
         user_name: m.user_name,
         user_email: m.user_email,
         admin_name: m.admin_name,
       }))
 
-      // Sort by created_at
-      const sortedMessages = mappedMessages.sort((a, b) => {
-        const dateA = new Date(a.createdAt).getTime()
-        const dateB = new Date(b.createdAt).getTime()
-        return dateA - dateB
-      })
-
-      setMessages(sortedMessages)
-    } catch (error: any) {
-      // ✅ Better error handling
-      if (error.message?.includes('Unauthorized')) {
-        console.warn('Chat: Admin not authenticated')
-      } else {
-        logger.error('Error loading chat messages:', error)
-      }
+      setMessages(mappedMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()))
+    } catch (error) {
+      console.error('Error loading messages', error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadChatUsers()
+    pollingIntervalRef.current = setInterval(() => {
+      loadChatUsers()
+      if (selectedUserId) loadChatMessages(selectedUserId)
+    }, 3000)
+
+    return () => { if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current) }
+  }, [selectedUserId, loadChatUsers, loadChatMessages])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
 
   const handleSelectUser = (userId: number) => {
     setSelectedUserId(userId)
-    loadChatMessages(userId)
-    // ✅ Reset unread count for this user và update last seen
-    setChatUsers(prev => prev.map(u => 
-      u.userId === userId ? { ...u, unreadCount: 0 } : u
-    ))
-    // Update last seen timestamp
     localStorage.setItem(`lastSeen_${userId}`, Date.now().toString())
+    loadChatMessages(userId)
+    setChatUsers(prev => prev.map(u => u.userId === userId ? { ...u, unreadCount: 0 } : u))
   }
 
   const handleSendMessage = async () => {
     if (!messageText.trim() || isLoading || !selectedUserId) return
 
+    const text = messageText
+    setMessageText("")
     setIsLoading(true)
+
     try {
-      const result = await apiPost('/api/chat', {
-        message: messageText,
-        receiverId: selectedUserId
-      })
-
-      // Add message to local state immediately
-      const newMessage: Message = {
-        id: result.message?.id || Date.now(),
-        message: messageText,
-        isAdmin: true,
-        createdAt: result.message?.createdAt || new Date().toISOString(),
-        admin_name: 'Admin'
-      }
-
-      setMessages(prev => [...prev, newMessage])
-      setMessageText("")
-      
-      // Reload chat history after a short delay
-      setTimeout(() => {
-        loadChatMessages(selectedUserId)
-        loadChatUsers()
-      }, 500)
-    } catch (error: any) {
-      logger.error('Error sending message:', error)
-      alert("Lỗi gửi tin nhắn: " + (error.message || "Vui lòng thử lại"))
+      await apiPost('/api/chat', { message: text, receiverId: selectedUserId })
+      loadChatMessages(selectedUserId)
+    } catch (error) {
+      logger.error('Error sending message', error)
     } finally {
-      setIsLoading(false)
+      setIsLoading(true) // Giữ loading ngắn để UI mượt
+      setTimeout(() => setIsLoading(false), 500)
     }
   }
 
@@ -230,77 +160,62 @@ export function ChatAdmin() {
   const selectedUser = chatUsers.find(u => u.userId === selectedUserId)
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Users List */}
-      <Card className="lg:col-span-1">
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Khách hàng</span>
-            <Badge className="bg-green-500">
-              {chatUsers.length} người
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-250px)] min-h-[600px]">
+      {/* Users List - 4 columns */}
+      <Card className="lg:col-span-4 border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden glass-panel flex flex-col">
+        <CardHeader className="p-4 border-b border-white/5 bg-slate-50/50 dark:bg-slate-900/50">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <UserCog className="w-5 h-5 text-blue-500" />
+              <span>Khách hàng</span>
+            </div>
+            <Badge variant="secondary" className="bg-blue-500/10 text-blue-500 border-none">
+              {chatUsers.length}
             </Badge>
           </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <div className="relative mt-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Tìm kiếm khách hàng..."
+              placeholder="Tìm kiếm..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 bg-white/5 border-white/10 h-10 rounded-xl"
             />
           </div>
-
-          {/* Users List */}
-          <ScrollArea className="h-[600px]">
-            <div className="space-y-2">
+        </CardHeader>
+        <CardContent className="p-0 flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="p-2 space-y-1">
               {filteredUsers.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Chưa có khách hàng nào chat</p>
+                <div className="py-20 text-center opacity-30">
+                  <MessageCircle className="w-12 h-12 mx-auto mb-2" />
+                  <p className="text-xs">Chưa có ai nhắn tin</p>
                 </div>
               ) : (
                 filteredUsers.map((user) => (
                   <div
                     key={user.userId}
                     onClick={() => handleSelectUser(user.userId)}
-                    className={`p-3 border rounded-lg cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                      selectedUserId === user.userId
-                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                        : 'border-gray-200 dark:border-gray-700'
-                    }`}
+                    className={`p-3 rounded-xl cursor-pointer transition-all flex items-center gap-3 active:scale-[0.98] ${selectedUserId === user.userId
+                      ? 'bg-gradient-to-r from-blue-600/20 to-purple-600/20 border-l-4 border-blue-500 shadow-inner'
+                      : 'hover:bg-white/5 border-l-4 border-transparent'
+                      }`}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-gray-400" />
-                          <p className="font-semibold text-sm">{user.userName}</p>
-                          {user.unreadCount > 0 && (
-                            <Badge className="bg-red-500 text-white text-xs">
-                              {user.unreadCount}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">{user.userEmail}</p>
-                        {user.lastMessage && (
-                          <p className="text-xs text-gray-400 mt-1 truncate">
-                            {user.lastMessage}
-                          </p>
-                        )}
-                        {user.lastMessageTime && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            <Clock className="w-3 h-3 inline mr-1" />
-                            {new Date(user.lastMessageTime).toLocaleString('vi-VN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              day: '2-digit',
-                              month: '2-digit'
-                            })}
-                          </p>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white font-bold shrink-0">
+                      {user.userName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold text-sm truncate">{user.userName}</p>
+                        {user.unreadCount > 0 && (
+                          <span className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[10px] text-white font-bold animate-pulse">
+                            {user.unreadCount}
+                          </span>
                         )}
                       </div>
+                      <p className="text-[10px] text-muted-foreground truncate opacity-60">
+                        {user.lastMessage || user.userEmail}
+                      </p>
                     </div>
                   </div>
                 ))
@@ -310,70 +225,84 @@ export function ChatAdmin() {
         </CardContent>
       </Card>
 
-      {/* Chat Interface */}
-      <Card className="lg:col-span-2">
-        <CardHeader className="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
-          <CardTitle className="flex items-center justify-between">
-            {selectedUser ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="w-5 h-5" />
-                  <span>Chat với {selectedUser.userName}</span>
+      {/* Chat Area - 8 columns */}
+      <Card className="lg:col-span-8 border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden glass-panel flex flex-col relative">
+        {selectedUser ? (
+          <>
+            <CardHeader className="p-4 border-b border-white/5 bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <User className="w-6 h-6 text-blue-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base leading-tight">{selectedUser.userName}</h3>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">Đang trực tuyến</p>
+                    </div>
+                  </div>
                 </div>
-                <Badge className="bg-green-500">Online</Badge>
-              </>
-            ) : (
-              <span>Chọn khách hàng để bắt đầu chat</span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {selectedUser ? (
-            <>
-              {/* Messages Area */}
-              <ScrollArea className="h-[500px] p-4">
-                <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="hidden md:block text-right mr-3 group">
+                    <p className="text-[10px] font-bold opacity-40 group-hover:opacity-100 transition-opacity uppercase">Email Khách hàng</p>
+                    <p className="text-xs font-medium opacity-60 group-hover:opacity-100">{selectedUser.userEmail}</p>
+                  </div>
+                  <Button variant="outline" size="icon" className="rounded-full border-white/10 hover:bg-white/5" onClick={() => loadChatMessages(selectedUser.userId)}>
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-0 flex-1 flex flex-col overflow-hidden bg-slate-900/10">
+              <ScrollArea className="flex-1 p-4">
+                <div className="space-y-6">
                   {messages.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">Chưa có tin nhắn. Hãy gửi tin nhắn đầu tiên!</p>
+                    <div className="flex flex-col items-center justify-center py-20 opacity-20 italic">
+                      <MessageCircle className="w-12 h-12 mb-2" />
+                      <p className="text-sm">Hãy bắt đầu cuộc trò chuyện...</p>
                     </div>
                   ) : (
-                    messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={`flex ${msg.isAdmin ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`max-w-[80%] rounded-lg p-3 ${
-                            msg.isAdmin
-                              ? 'bg-purple-100 dark:bg-purple-900/30 text-gray-900 dark:text-gray-100'
-                              : 'bg-blue-100 dark:bg-blue-900/30 text-gray-900 dark:text-gray-100'
-                          }`}
-                        >
-                          <p className="text-xs font-semibold mb-1 opacity-70">
-                            {msg.isAdmin ? 'Bạn (Admin)' : msg.user_name || msg.user_email || 'Khách hàng'}
-                          </p>
-                          <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
-                          <p className="text-xs opacity-50 mt-1">
-                            {new Date(msg.createdAt).toLocaleTimeString('vi-VN', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </p>
+                    messages.map((msg) => {
+                      const isAI = msg.senderType === 'ai' || msg.message.startsWith('🤖');
+                      const isMe = msg.isAdmin;
+
+                      return (
+                        <div key={msg.id} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`flex flex-col max-w-[85%] ${isMe ? 'items-end' : 'items-start'}`}>
+                            <div className="flex items-center gap-1.5 mb-1 px-1">
+                              {!isMe && <span className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Khách</span>}
+                              {isAI && <Bot className="w-3 h-3 text-purple-400" />}
+                              {isMe && !isAI && <span className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Bạn</span>}
+                            </div>
+                            <div className={`p-3 rounded-2xl text-sm shadow-sm ${isMe
+                              ? 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-tr-none'
+                              : isAI
+                                ? 'bg-purple-500/10 border border-purple-500/20 text-purple-800 dark:text-purple-200 rounded-tl-none'
+                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-tl-none'
+                              }`}>
+                              <p className="whitespace-pre-wrap leading-relaxed">{msg.message.replace(/^🤖 /, '')}</p>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 px-1 opacity-40 scale-[0.8] origin-right">
+                              <span className="text-[9px] font-medium">
+                                {new Date(msg.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              {isMe && <CheckCheck className="w-3 h-3 text-blue-400" />}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      )
+                    })
                   )}
                   <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
 
-              {/* Input Area */}
-              <div className="border-t p-4 bg-gray-50 dark:bg-gray-800">
-                <div className="flex gap-2">
+              <div className="p-4 border-t border-white/5 bg-slate-50/50 dark:bg-slate-900/80 backdrop-blur-md">
+                <div className="flex items-end gap-2 bg-white/5 p-1 rounded-2xl border border-white/10 focus-within:border-blue-500/50 transition-all shadow-inner">
                   <Textarea
-                    placeholder="Nhập tin nhắn..."
+                    placeholder="Viết câu trả lời của bạn..."
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
                     onKeyDown={(e) => {
@@ -382,32 +311,33 @@ export function ChatAdmin() {
                         handleSendMessage()
                       }
                     }}
-                    rows={2}
-                    className="resize-none"
+                    rows={1}
+                    className="flex-1 bg-transparent border-none focus-visible:ring-0 resize-none min-h-[44px] max-h-[120px] py-3 px-4"
                   />
                   <Button
                     onClick={handleSendMessage}
                     disabled={!messageText.trim() || isLoading}
-                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                    className="h-10 w-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shrink-0 mb-0.5"
                   >
-                    <Send className="w-4 h-4" />
+                    {isLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send className="w-4 h-4" />}
                   </Button>
                 </div>
-                <p className="text-xs text-gray-500 mt-2 text-center">
-                  Nhấn Enter để gửi, Shift+Enter để xuống dòng
-                </p>
+                <div className="flex justify-between items-center mt-2 px-1">
+                  <p className="text-[10px] text-muted-foreground opacity-40">Shift + Enter để xuống dòng</p>
+                  <p className="text-[10px] text-muted-foreground opacity-40">AI sẽ tự động phản hồi nếu tin nhắn mới từ khách</p>
+                </div>
               </div>
-            </>
-          ) : (
-            <div className="h-[600px] flex items-center justify-center text-gray-500">
-              <div className="text-center">
-                <MessageCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-semibold mb-2">Chưa chọn khách hàng</p>
-                <p className="text-sm">Chọn một khách hàng từ danh sách bên trái để bắt đầu chat</p>
-              </div>
+            </CardContent>
+          </>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center opacity-20 p-10 text-center">
+            <div className="w-24 h-24 rounded-full bg-slate-500/10 flex items-center justify-center mb-6">
+              <MessageCircle className="w-12 h-12" />
             </div>
-          )}
-        </CardContent>
+            <h3 className="text-xl font-bold mb-2">Trung tâm Chăm sóc Khách hàng</h3>
+            <p className="max-w-[300px] text-sm leading-relaxed">Chọn một khách hàng từ danh sách bên trái để phản hồi thắc mắc và hỗ trợ trực tuyến.</p>
+          </div>
+        )}
       </Card>
     </div>
   )

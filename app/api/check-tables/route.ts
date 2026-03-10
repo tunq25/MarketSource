@@ -14,7 +14,7 @@ export async function GET() {
     const usersTableResult = await queryOne<any>(`
       SELECT EXISTS (
         SELECT 1 FROM information_schema.tables 
-        WHERE table_schema = DATABASE() 
+        WHERE table_schema = 'public' 
         AND table_name = 'users'
       ) as exists_table;
     `);
@@ -24,7 +24,7 @@ export async function GET() {
     const notificationsTableResult = await queryOne<any>(`
       SELECT EXISTS (
         SELECT 1 FROM information_schema.tables 
-        WHERE table_schema = DATABASE() 
+        WHERE table_schema = 'public' 
         AND table_name = 'notifications'
       ) as exists_table;
     `);
@@ -39,7 +39,7 @@ export async function GET() {
       const usersColumnsResult = await query<any>(`
         SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns
-        WHERE table_schema = DATABASE() AND table_name = 'users'
+        WHERE table_schema = 'public' AND table_name = 'users'
         ORDER BY ordinal_position;
       `);
       result.users.structure = usersColumnsResult;
@@ -53,7 +53,7 @@ export async function GET() {
       const notificationsColumnsResult = await query<any>(`
         SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns
-        WHERE table_schema = DATABASE() AND table_name = 'notifications'
+        WHERE table_schema = 'public' AND table_name = 'notifications'
         ORDER BY ordinal_position;
       `);
       result.notifications.structure = notificationsColumnsResult;

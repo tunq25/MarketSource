@@ -18,28 +18,28 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
-    
+
     // Verify authentication
     const authUser = await verifyFirebaseToken(request);
-    
+
     // ✅ FIX: Dùng requireAdmin() thay vì check X-Admin-Auth header
     const { requireAdmin } = await import('@/lib/api-auth');
     const isAdmin = await requireAdmin(request).catch(() => false);
-    
+
     if (!authUser && !isAdmin) {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized'
       }, { status: 401 });
     }
-    
+
     // ✅ FIX: Nếu có userId param và không phải admin → verify chính là user đó
     if (userId && authUser && !isAdmin) {
       // userId từ query param có thể là number (PostgreSQL ID) hoặc string (Firebase UID)
       // Cần check bằng cách so sánh email hoặc convert userId sang uid
       const dbUserId = await getUserIdByEmail(authUser.email || '');
       const userIdNum = parseInt(userId);
-      
+
       // So sánh cả DB ID và Firebase UID
       if (dbUserId !== userIdNum && authUser.uid !== userId) {
         return NextResponse.json({
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         }, { status: 403 });
       }
     }
-    
+
     // ✅ FIX: Convert userId đúng cách (number hoặc string)
     let dbUserId: number | undefined = undefined
     if (userId) {
@@ -60,12 +60,12 @@ export async function GET(request: NextRequest) {
     }
 
     const purchases = await getPurchases(dbUserId)
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       success: true,
       purchases: purchases,
       data: purchases, // Keep both for backward compatibility
-      error: null 
+      error: null
     });
   } catch (error: unknown) {
     const { createErrorResponse, logError } = await import("@/lib/error-handler")
@@ -94,21 +94,21 @@ export async function POST(request: NextRequest) {
         error: 'Unauthorized'
       }, { status: 401 });
     }
-    
+
     const body = await request.json();
-    
+
     // Validate với Zod
     const validation = validateRequest(body, purchaseSchema);
-    
+
     if (!validation.valid || !validation.data) {
       return NextResponse.json({
         success: false,
         error: validation.error || 'Dữ liệu không hợp lệ'
       }, { status: 400 });
     }
-    
+
     const purchaseData = validation.data;
-    
+
     // Verify userId matches authenticated user
     // ✅ FIX: So sánh đúng kiểu dữ liệu (string vs number)
     // userId có thể là string (Firebase UID) hoặc number (PostgreSQL ID)
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       // Nếu là number (DB ID), cần convert sang email để so sánh
       if (!isNaN(Number(purchaseData.userId))) {
         // Là DB ID, cần check bằng email
-        const { getUserById } = await import('@/lib/database');
+        const { getUserByIdMySQL: getUserById } = await import('@/lib/database-mysql');
         const user = await getUserById(Number(purchaseData.userId));
         if (user && user.email !== authUser.email) {
           return NextResponse.json({
@@ -129,27 +129,27 @@ export async function POST(request: NextRequest) {
       } else {
         // Là string (Firebase UID), so sánh trực tiếp
         if (purchaseUserIdStr !== authUser.uid) {
-      return NextResponse.json({
-        success: false,
-        error: 'Unauthorized: User ID mismatch'
-      }, { status: 403 });
+          return NextResponse.json({
+            success: false,
+            error: 'Unauthorized: User ID mismatch'
+          }, { status: 403 });
         }
       }
     }
-    
+
     // ✅ FIX: Normalize userId - nếu là string (uid), dùng email để tìm DB ID
     const dbUserId = await normalizeUserIdMySQL(
       purchaseData.userId || authUser.uid,
       authUser.email || undefined,
     )
-    
+
     if (!dbUserId) {
       return NextResponse.json({
         success: false,
         error: 'Cannot resolve user ID. User may not exist in database.'
       }, { status: 400 });
     }
-    
+
     // ✅ FIX: Remove duplicate check trước transaction - rely on database constraint và check trong transaction
     // createPurchase đã có check duplicate trong transaction với row locking, đảm bảo atomicity
     const productIdNum = typeof purchaseData.productId === 'number'
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
       amount: purchaseData.amount,
       userEmail: authUser.email || undefined
     });
-    
+
     const product = await getProductById(productIdNum);
     notifyPurchaseSuccess({
       userName: authUser.email?.split('@')[0],
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
       logger.warn('Failed to notify purchase success', { error: error?.message });
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       purchaseId: result.id,
       newBalance: result.newBalance
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const { createErrorResponse, logError } = await import('@/lib/error-handler');
     logError('Purchase POST', error);
-    
+
     // Handle specific errors
     if (error instanceof Error && error.message?.includes('Insufficient balance')) {
       return NextResponse.json({
@@ -188,14 +188,14 @@ export async function POST(request: NextRequest) {
         error: 'Số dư không đủ để thực hiện giao dịch'
       }, { status: 400 });
     }
-    
+
     if (error instanceof Error && error.message?.includes('already purchased')) {
-    return NextResponse.json({ 
-      success: false,
+      return NextResponse.json({
+        success: false,
         error: 'Bạn đã mua sản phẩm này rồi'
       }, { status: 400 });
     }
-    
+
     return NextResponse.json(
       createErrorResponse(error, 500),
       { status: 500 }

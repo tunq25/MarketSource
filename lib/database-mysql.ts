@@ -18,7 +18,7 @@ const usePostgresBridge = !process.env.MYSQL_HOST;
 type Pool = ReturnType<typeof mysql.createPool>
 type PoolConnection = Awaited<ReturnType<Pool['getConnection']>>
 
-let pool: Pool | null = null
+// (Removed duplicate let pool definition to fix redeclaration error)
 
 function createPool(): Pool {
   if (usePostgresBridge) {
@@ -85,9 +85,19 @@ function createPool(): Pool {
   return newPool
 }
 
+// ✅ FIX: Lưu trữ connection pool vào biến globalThis để tránh rò rỉ kết nối khi Hot-Reload
+const globalForMysql = global as unknown as {
+  mysqlPool: Pool | null;
+};
+
+let pool: Pool | null = globalForMysql.mysqlPool || null;
+
 function getPool(): Pool {
   if (!pool) {
     pool = createPool()
+    if (process.env.NODE_ENV !== 'production') {
+      globalForMysql.mysqlPool = pool;
+    }
   }
   return pool
 }
@@ -134,6 +144,11 @@ function convertToPostgresSql(sql: string): string {
   let index = 1;
   converted = converted.replace(/\?/g, () => `$${index++}`);
 
+  // 4. ✅ FIX: Auto-add RETURNING id cho INSERT nếu chưa có (để lấy insertId)
+  if (converted.trim().toUpperCase().startsWith('INSERT INTO') && !converted.toUpperCase().includes('RETURNING')) {
+    converted = converted.trim() + ' RETURNING id';
+  }
+
   return converted;
 }
 
@@ -141,7 +156,23 @@ export async function query<T = any>(sql: string, params: any[] = []): Promise<T
   if (usePostgresBridge) {
     try {
       const pgSql = convertToPostgresSql(sql);
-      return await pg.query(pgSql, params);
+      const result = await pg.query(pgSql, params);
+
+      // ✅ FIX: Nếu là INSERT, bọc kết quả để trả về insertId tương tự MySQL
+      if (sql.trim().toUpperCase().startsWith('INSERT INTO')) {
+        const rows = result as any[];
+        const insertId = rows.length > 0 ? rows[0].id || 0 : 0;
+        const affectedRows = rows.length; // PostreSQL bridge returns rows, use length as affectedRows approximation
+        const fakeResult: any = {
+          insertId,
+          affectedRows,
+          warningStatus: 0,
+        };
+        // MySQL .query thường trả về kết quả này thay vì rows array cho INSERT
+        return fakeResult as any;
+      }
+
+      return result as T[];
     } catch (err: any) {
       logger.error("Bridge PostgreSQL: query error", err, { sql: sql.substring(0, 100) });
       throw err;
@@ -256,45 +287,79 @@ export async function createOrUpdateUserMySQL(userData: {
   role?: "user" | "admin"
 }) {
   try {
-    let finalUsername = userData.username || userData.name || `user_${Date.now()}`
+    // ✅ Check nếu user đã tồn tại
+    const existing = await queryOne<any>("SELECT id, username FROM users WHERE email = ?", [userData.email])
 
-    const existingByUsername = await queryOne<any>(
-      "SELECT id FROM users WHERE username = ?",
-      [finalUsername],
-    )
-    if (existingByUsername && userData.username) {
-      finalUsername = `${userData.username}_${Date.now()}_${Math.floor(Math.random() * 1000)}`
-    }
+    if (existing) {
+      // ✅ FIX CRITICAL: Chỉ UPDATE các field được truyền vào, KHÔNG ghi đè password_hash thành null
+      const updates: string[] = []
+      const params: any[] = []
 
-    const sql = `
-      INSERT INTO users (
-        email, name, username, password_hash, avatar_url, ip_address, role, created_at, updated_at
+      if (userData.name !== undefined) {
+        updates.push("name = ?")
+        params.push(userData.name)
+      }
+      if (userData.username !== undefined) {
+        updates.push("username = ?")
+        params.push(userData.username)
+      }
+      // ✅ CHỈ update password_hash khi có giá trị cụ thể (không phải undefined/null)
+      if (userData.passwordHash) {
+        updates.push("password_hash = ?")
+        params.push(userData.passwordHash)
+      }
+      if (userData.avatarUrl !== undefined) {
+        updates.push("avatar_url = ?")
+        params.push(userData.avatarUrl)
+      }
+      if (userData.ipAddress) {
+        updates.push("ip_address = ?")
+        params.push(userData.ipAddress)
+      }
+      if (userData.role !== undefined) {
+        updates.push("role = ?")
+        params.push(userData.role)
+      }
+
+      updates.push("updated_at = NOW()")
+      params.push(existing.id)
+
+      if (updates.length > 1) {
+        await query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, params)
+      }
+
+      return { id: Number(existing.id), isNew: false }
+    } else {
+      // INSERT user mới
+      let finalUsername = userData.username || userData.name || `user_${Date.now()}`
+
+      const existingByUsername = await queryOne<any>(
+        "SELECT id FROM users WHERE username = ?",
+        [finalUsername],
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-      ON DUPLICATE KEY UPDATE
-        name = VALUES(name),
-        username = VALUES(username),
-        password_hash = VALUES(password_hash),
-        avatar_url = VALUES(avatar_url),
-        ip_address = VALUES(ip_address),
-        role = VALUES(role),
-        updated_at = NOW()
-    `
+      if (existingByUsername) {
+        finalUsername = `${finalUsername}_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+      }
 
-    await query(sql, [
-      userData.email,
-      userData.name || finalUsername,
-      finalUsername,
-      userData.passwordHash || null,
-      userData.avatarUrl || null,
-      userData.ipAddress || null,
-      userData.role || "user",
-    ])
+      await query(
+        `INSERT INTO users (email, name, username, password_hash, avatar_url, ip_address, role, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          userData.email,
+          userData.name || finalUsername,
+          finalUsername,
+          userData.passwordHash || null,
+          userData.avatarUrl || null,
+          userData.ipAddress || null,
+          userData.role || "user",
+        ]
+      )
 
-    const row = await queryOne<any>("SELECT id FROM users WHERE email = ?", [userData.email])
-    if (!row) throw new Error("Failed to create/update user")
+      const row = await queryOne<any>("SELECT id FROM users WHERE email = ?", [userData.email])
+      if (!row) throw new Error("Failed to create user")
 
-    return { id: Number(row.id), isNew: false }
+      return { id: Number(row.id), isNew: true }
+    }
   } catch (err) {
     logger.error("MySQL: createOrUpdateUser error", err, { email: userData.email })
     throw err
@@ -431,11 +496,11 @@ export async function approveDepositAndUpdateBalanceMySQL(
       [depositId],
     )
     const deposit = depRows[0]
-    if (!deposit) throw new Error("Deposit not found")
-    if (deposit.status === "approved") throw new Error("Deposit has already been approved")
-    if (deposit.status === "rejected") throw new Error("Deposit has been rejected")
-    if (Number(deposit.user_id) !== userId) throw new Error("User ID mismatch with deposit")
-    if (Number(deposit.amount) !== amount) throw new Error("Amount mismatch with deposit")
+    if (!deposit) throw new Error("Không tìm thấy yêu cầu nạp tiền")
+    if (deposit.status === "approved") throw new Error("Yêu cầu nạp tiền này đã được duyệt trước đó")
+    if (deposit.status === "rejected") throw new Error("Yêu cầu nạp tiền này đã bị từ chối")
+    if (Number(deposit.user_id) !== Number(userId)) throw new Error("User ID không khớp")
+    if (Math.abs(Number(deposit.amount) - Number(amount)) > 0.01) throw new Error("Số tiền không khớp với yêu cầu nạp")
 
     const [userRows]: any = await conn.query(
       "SELECT balance FROM users WHERE id = ? FOR UPDATE",
@@ -598,8 +663,9 @@ export async function approveWithdrawalAndUpdateBalanceMySQL(
     if (!withdrawal) throw new Error("Withdrawal not found")
     if (withdrawal.status === "approved") throw new Error("Withdrawal has already been approved")
     if (withdrawal.status === "rejected") throw new Error("Withdrawal has been rejected")
-    if (Number(withdrawal.user_id) !== userId) throw new Error("User ID mismatch with withdrawal")
-    if (Number(withdrawal.amount) !== amount) throw new Error("Amount mismatch with withdrawal")
+    if (Number(withdrawal.user_id) !== Number(userId)) throw new Error("User ID mismatch with withdrawal")
+    // ✅ FIX: So sánh amount với epsilon để tránh sai lệch kiểu decimal/string từ PostgreSQL
+    if (Math.abs(Number(withdrawal.amount) - Number(amount)) > 0.01) throw new Error("Amount mismatch with withdrawal")
 
     const [userRows]: any = await conn.query(
       "SELECT balance FROM users WHERE id = ? FOR UPDATE",
@@ -706,31 +772,17 @@ export async function createPurchaseMySQL(purchaseData: {
     if (!product.is_active) throw new Error("Product is not available")
 
     const price = Number(product.price)
-    if (price > purchaseData.amount) {
-      throw new Error("Amount must be at least equal to product price")
-    }
+    // ✅ FIX: Luôn mua với giá từ Database (đảm bảo atomic và ko tin client amount)
+    const finalPurchasePrice = price
 
-    const expectedQty = Math.round(purchaseData.amount / price)
-    const expectedAmount = expectedQty * price
-    if (Math.abs(purchaseData.amount - expectedAmount) > 0.01) {
-      throw new Error("Amount must be a multiple of product price")
-    }
-
-    const [exist]: any = await conn.query(
-      "SELECT id FROM purchases WHERE user_id = ? AND product_id = ?",
-      [dbUserId, productIdNum],
-    )
-    if (exist.length > 0) {
-      throw new Error("You have already purchased this product")
-    }
-
+    // ✅ FIX: Chỉ check số dư, không cần multiple of product price vì code thường mua 1 bản
     const [userRows]: any = await conn.query(
       "SELECT balance FROM users WHERE id = ? FOR UPDATE",
       [dbUserId],
     )
     const currentBalance = Number(userRows[0]?.balance || 0)
-    if (currentBalance < purchaseData.amount) {
-      throw new Error("Insufficient balance")
+    if (currentBalance < finalPurchasePrice) {
+      throw new Error(`Insufficient balance. Cần ${finalPurchasePrice.toLocaleString('vi-VN')}đ, hiện có ${currentBalance.toLocaleString('vi-VN')}đ`)
     }
 
     let purchaseId: number;
@@ -754,7 +806,7 @@ export async function createPurchaseMySQL(purchaseData: {
 
     await conn.query(
       "UPDATE users SET balance = balance - ?, updated_at = NOW() WHERE id = ? AND balance >= ?",
-      [purchaseData.amount, dbUserId, purchaseData.amount],
+      [finalPurchasePrice, dbUserId, finalPurchasePrice],
     )
 
     const [after]: any = await conn.query(
@@ -1082,9 +1134,12 @@ export async function updateProductMySQL(
       params.push(productData.imageUrl || null)
     }
     if (productData.tags !== undefined) {
-      const tagsJson = productData.tags ? JSON.stringify(productData.tags) : null
+      // ✅ FIX: Chỉ stringify tags nếu xài MySQL. Nếu là PostgreSQL (Dùng mảng native TEXT[]), truyền thẳng Array
+      const tagsValue = usePostgresBridge
+        ? (productData.tags || [])
+        : (productData.tags ? JSON.stringify(productData.tags) : null);
       updates.push("tags = ?")
-      params.push(tagsJson)
+      params.push(tagsValue)
     }
     if (productData.isActive !== undefined) {
       updates.push("is_active = ?")

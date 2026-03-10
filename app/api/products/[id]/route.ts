@@ -104,16 +104,16 @@ export async function PUT(
     // Update product
     const updatedProduct = await updateProduct(productId, {
       title: productData.title,
-      description: productData.description,
+      description: productData.description ?? undefined,
       price: productData.price,
-      category: productData.category,
-      demoUrl: productData.demoUrl,
-      downloadUrl: productData.downloadUrl,
-      imageUrl: productData.imageUrl,
-      tags: productData.tags,
-      isActive: productData.isActive,
-      averageRating: productData.averageRating, // Admin có thể manually set
-      downloadCount: productData.downloadCount, // Admin có thể manually set
+      category: productData.category ?? undefined,
+      demoUrl: productData.demoUrl ?? undefined,
+      downloadUrl: productData.downloadUrl ?? undefined,
+      imageUrl: productData.imageUrl ?? undefined,
+      tags: productData.tags ?? undefined,
+      isActive: productData.isActive ?? undefined,
+      averageRating: productData.averageRating ?? undefined,
+      downloadCount: productData.downloadCount ?? undefined,
     });
 
     return NextResponse.json({

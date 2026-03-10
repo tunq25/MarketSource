@@ -286,3 +286,91 @@ export async function sendDepositApprovalEmail(email: string, amount: number, ne
     `,
   });
 }
+
+export async function sendSystemNotificationEmail(email: string, title: string, message: string) {
+  const siteName = 'QTUS Dev Market';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://qtusdev.website';
+
+  const htmlTemplate = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f7f9; font-family: 'Inter', system-ui, -apple-system, sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f7f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+          
+          <!-- Brand Header -->
+          <tr>
+            <td style="background-color: #ffffff; padding: 32px 40px; text-align: left; border-bottom: 1px solid #f0f0f0;">
+              <span style="font-size: 24px; font-weight: 800; background: linear-gradient(to right, #6366f1, #ec4899); -webkit-background-clip: text; color: transparent;">QTUS DEV</span>
+              <span style="font-size: 24px; font-weight: 400; color: #1a1a2e; margin-left: 4px;">MARKET</span>
+            </td>
+          </tr>
+
+          <!-- Content Body -->
+          <tr>
+            <td style="padding: 40px;">
+              <div style="background-color: #f8faff; border-radius: 12px; padding: 12px 20px; display: inline-block; margin-bottom: 24px;">
+                <span style="color: #6366f1; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">📢 Thông báo hệ thống</span>
+              </div>
+              
+              <h2 style="color: #1a1a2e; font-size: 28px; font-weight: 800; margin: 0 0 20px 0; line-height: 1.2; letter-spacing: -0.5px;">
+                ${title}
+              </h2>
+
+              <div style="color: #475569; font-size: 16px; line-height: 1.8; margin: 0 0 32px 0;">
+                ${message.replace(/\n/g, '<br>')}
+              </div>
+
+              <!-- Action Button -->
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <a href="${siteUrl}/dashboard" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #ffffff; padding: 16px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);">
+                      Truy cập Hệ thống
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer Section -->
+          <tr>
+            <td style="background-color: #1a1a2e; padding: 40px; text-align: center;">
+              <p style="color: #94a3b8; font-size: 14px; margin: 0 0 16px 0;">
+                Bạn nhận được email này vì bạn là thành viên của QTUS Dev Market.
+              </p>
+              <div style="margin-bottom: 24px;">
+                <a href="${siteUrl}" style="color: #6366f1; text-decoration: none; font-size: 14px; font-weight: 600;">Website</a>
+                <span style="color: #334155; margin: 0 12px;">•</span>
+                <a href="${siteUrl}/terms" style="color: #6366f1; text-decoration: none; font-size: 14px; font-weight: 600;">Điều khoản</a>
+                <span style="color: #334155; margin: 0 12px;">•</span>
+                <a href="${siteUrl}/privacy" style="color: #6366f1; text-decoration: none; font-size: 14px; font-weight: 600;">Bảo mật</a>
+              </div>
+              <p style="color: #475569; font-size: 12px; margin: 0;">
+                © ${new Date().getFullYear()} QTUS Dev Market. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `[Thông báo] ${title}`,
+    html: htmlTemplate,
+  });
+}

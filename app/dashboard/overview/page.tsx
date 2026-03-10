@@ -183,6 +183,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadUserProfile()
+
+    // ✅ FIX: Lắng nghe sự kiện để cập nhật balance/profile khi admin duyệt hoặc user update elsewhere
+    const handleUserUpdate = () => {
+      setProfileLoaded(false)
+      loadUserProfile()
+    }
+
+    window.addEventListener('userUpdated', handleUserUpdate)
+    return () => window.removeEventListener('userUpdated', handleUserUpdate)
   }, [loadUserProfile])
 
   const handleProfileInputChange = (field: keyof typeof profileForm, value: string) => {
@@ -1232,10 +1241,10 @@ export default function DashboardPage() {
     const refreshUserBalance = async () => {
       if (!currentUser?.uid) return;
       try {
-        const { userManager } = await import('@/lib/userManager');
-        const syncedUserData = await userManager.getUserData(currentUser.uid as string);
+        const { getLocalStorage } = await import('@/lib/localStorage-utils');
+        const syncedUserData = getLocalStorage<UserData | null>('currentUser', null);
 
-        if (syncedUserData) {
+        if (syncedUserData && syncedUserData.uid === currentUser.uid) {
           setCurrentUser((prev) => ({
             ...prev!,
             balance: syncedUserData.balance ?? prev?.balance ?? 0,

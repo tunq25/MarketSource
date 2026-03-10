@@ -97,17 +97,48 @@ export function ChatWidget() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    try {
-      const userStr =
-        localStorage.getItem("currentUser") ||
-        localStorage.getItem("qtusdev_user") ||
-        localStorage.getItem("qtusdev_user_fallback")
-      if (userStr) {
-        const user = JSON.parse(userStr) as UserType
-        setCurrentUser(user)
+
+    const loadUser = () => {
+      try {
+        const userStr =
+          localStorage.getItem("currentUser") ||
+          localStorage.getItem("qtusdev_user") ||
+          localStorage.getItem("qtusdev_user_fallback")
+        if (userStr) {
+          const user = JSON.parse(userStr) as UserType
+          setCurrentUser(user)
+        } else {
+          setCurrentUser(null)
+        }
+      } catch (error) {
+        logger.error("Error parsing user:", error)
       }
-    } catch (error) {
-      logger.error("Error parsing user:", error)
+    }
+
+    // Load user lần đầu
+    loadUser()
+
+    // ✅ FIX: Lắng nghe sự kiện login/logout để auto-sync auth state
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "currentUser" || e.key === "qtusdev_user" || e.key === "isLoggedIn") {
+        loadUser()
+      }
+    }
+
+    const handleUserUpdate = () => loadUser()
+
+    window.addEventListener("storage", handleStorageChange)
+    window.addEventListener("userUpdated", handleUserUpdate)
+    window.addEventListener("loginSuccess", handleUserUpdate)
+
+    // ✅ FIX: Poll mỗi 2s để check nếu user vừa login (vì storage event không fire cho cùng tab)
+    const authCheckInterval = setInterval(loadUser, 2000)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+      window.removeEventListener("userUpdated", handleUserUpdate)
+      window.removeEventListener("loginSuccess", handleUserUpdate)
+      clearInterval(authCheckInterval)
     }
   }, [])
 
@@ -268,30 +299,37 @@ export function ChatWidget() {
       <div
         key={msg.id}
         className={cn(
-          "flex gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300",
-          isUser ? "justify-end" : "justify-start"
+          "flex gap-2 w-full animate-in fade-in slide-in-from-bottom-2 duration-300",
+          isUser ? "flex-row-reverse" : "flex-row"
         )}
       >
-        {/* Avatar phía bên trái cho Admin/AI */}
-        {!isUser && (
-          <div
-            className={cn(
-              "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center shadow-md",
-              isAI
+        {/* Avatar */}
+        <div
+          className={cn(
+            "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center shadow-md",
+            isUser
+              ? "bg-gradient-to-br from-purple-500 to-pink-500"
+              : isAI
                 ? "bg-gradient-to-br from-emerald-400 to-cyan-500"
                 : "bg-gradient-to-br from-purple-500 to-pink-500"
-            )}
-          >
-            {isAI ? <Bot className="w-4 h-4 text-white" /> : <Shield className="w-4 h-4 text-white" />}
-          </div>
-        )}
+          )}
+        >
+          {isUser ? (
+            <User className="w-4 h-4 text-white" />
+          ) : isAI ? (
+            <Bot className="w-4 h-4 text-white" />
+          ) : (
+            <Shield className="w-4 h-4 text-white" />
+          )}
+        </div>
 
-        <div className={cn("max-w-[78%] group", isUser ? "order-1" : "order-2")}>
+        {/* Message Container */}
+        <div className={cn("flex flex-col max-w-[78%] group", isUser ? "items-end" : "items-start")}>
           {/* Sender label */}
           <p
             className={cn(
               "text-[10px] font-semibold mb-1 px-1",
-              isUser ? "text-right text-purple-300" : isAI ? "text-emerald-400" : "text-purple-400"
+              isUser ? "text-purple-300/80" : isAI ? "text-emerald-400/90" : "text-purple-400/90"
             )}
           >
             {isUser ? "Bạn" : isAI ? "🤖 AI Assistant" : "👨‍💼 Admin QtusDev"}
@@ -300,23 +338,17 @@ export function ChatWidget() {
           {/* Bubble */}
           <div
             className={cn(
-              "rounded-2xl px-4 py-2.5 shadow-lg backdrop-blur-sm transition-all relative",
+              "rounded-2xl px-3 py-2 shadow-lg backdrop-blur-sm transition-all relative",
               isUser
-                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-md"
+                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-tr-sm rounded-br-sm"
                 : isAI
-                  ? "bg-gradient-to-r from-emerald-900/60 to-cyan-900/60 text-emerald-50 border border-emerald-500/30 rounded-bl-md"
-                  : "bg-white/10 text-white border border-white/10 rounded-bl-md"
+                  ? "bg-gradient-to-r from-emerald-900/60 to-cyan-900/60 text-emerald-50 border border-emerald-500/30 rounded-tl-sm rounded-bl-sm"
+                  : "bg-white/10 text-white border border-white/10 rounded-tl-sm rounded-bl-sm"
             )}
           >
-            {/* AI badge */}
-            {isAI && (
-              <div className="flex items-center gap-1 mb-1">
-                <Sparkles className="w-3 h-3 text-emerald-300" />
-                <span className="text-[10px] text-emerald-300/80 font-medium">AI-Powered</span>
-              </div>
-            )}
-            <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{msg.message}</p>
-            <p className={cn("text-[10px] mt-1.5 opacity-50", isUser ? "text-right" : "text-left")}>
+            <p className="text-[13px] whitespace-pre-wrap break-words leading-snug">{msg.message}</p>
+            <p className={cn("text-[10px] mt-1 opacity-60", isUser ? "text-right" : "text-left")}>
+              {isAI && <span className="text-emerald-300/70 mr-1">✦ AI</span>}
               {new Date(msg.createdAt).toLocaleTimeString("vi-VN", {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -324,13 +356,6 @@ export function ChatWidget() {
             </p>
           </div>
         </div>
-
-        {/* Avatar phía bên phải cho User */}
-        {isUser && (
-          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-md order-2">
-            <User className="w-4 h-4 text-white" />
-          </div>
-        )}
       </div>
     )
   }
@@ -365,14 +390,18 @@ export function ChatWidget() {
         <div
           className={cn(
             "fixed z-50 transition-all duration-500 ease-out",
+            "left-0 right-0 bottom-0 sm:left-auto sm:right-6 sm:bottom-6", // Position
             isExpanded
-              ? "bottom-4 right-4 w-[32rem] h-[85vh]"
+              ? "h-dvh sm:h-[min(800px,85vh)] w-full sm:w-[32rem]"
               : isMinimized
-                ? "bottom-6 right-6 w-80"
-                : "bottom-6 right-6 w-[26rem]"
+                ? "h-14 w-full sm:w-80"
+                : "h-[70vh] max-h-[600px] w-full sm:w-[26rem]"
           )}
         >
-          <div className="h-full flex flex-col rounded-2xl shadow-2xl border border-white/10 overflow-hidden bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 backdrop-blur-xl">
+          <div className={cn(
+            "h-full w-full flex flex-col shadow-2xl border-x border-t sm:border border-white/10 overflow-hidden bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 backdrop-blur-xl",
+            isMinimized ? "rounded-t-2xl sm:rounded-2xl" : "rounded-t-2xl sm:rounded-2xl"
+          )}>
             {/* ====== HEADER ====== */}
             <div className="relative bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 p-4 flex items-center justify-between">
               {/* Glow effect */}
@@ -441,9 +470,9 @@ export function ChatWidget() {
                     {/* Messages Area */}
                     <ScrollArea
                       ref={scrollAreaRef}
-                      className={cn("flex-1 px-4 py-3", isExpanded ? "max-h-[calc(85vh-220px)]" : "h-[350px]")}
+                      className="flex-1 px-4 py-3 min-h-0"
                     >
-                      <div className="space-y-4">
+                      <div className="space-y-4 pr-3 pb-2">
                         {messages.length === 0 ? (
                           <div className="text-center py-8 flex flex-col items-center gap-3">
                             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-purple-500/20">

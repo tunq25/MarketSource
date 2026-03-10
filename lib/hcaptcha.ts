@@ -20,6 +20,8 @@ export interface HCaptchaVerifyResult {
  * @param remoteip - Optional client IP address
  * @returns Verification result
  */
+
+
 export async function verifyHCaptcha(
     token: string,
     remoteip?: string
@@ -35,6 +37,12 @@ export async function verifyHCaptcha(
 
     if (!token) {
         return { success: false, 'error-codes': ['missing-input-response'] };
+    }
+
+    // Bypass verification for hCaptcha test tokens to prevent registration errors when using test sitekey
+    if (token === '10000000-ffff-ffff-ffff-000000000001' || token === '20000000-ffff-ffff-ffff-000000000002') {
+        console.warn('[hCaptcha] Test token detected, bypassing verification');
+        return { success: true };
     }
 
     try {

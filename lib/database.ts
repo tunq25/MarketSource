@@ -179,12 +179,20 @@ function createPool(): Pool | null {
   return pool;
 }
 
-let poolInstance: Pool | null = null;
+// ✅ FIX: Lưu trữ connection pool vào biến globalThis để tránh rò rỉ kết nối khi Hot-Reload trong môi trường Dev (gây lỗi 500 Timeout)
+const globalForDb = global as unknown as {
+  poolInstance: Pool | null;
+};
+
+let poolInstance: Pool | null = globalForDb.poolInstance || null;
 
 function getPoolInstance(): Pool | null {
   if (!poolInstance) {
     try {
       poolInstance = createPool();
+      if (process.env.NODE_ENV !== 'production') {
+        globalForDb.poolInstance = poolInstance;
+      }
       // Error handler - chỉ thêm nếu poolInstance không null
       if (poolInstance) {
         poolInstance.on('error', (err) => {
@@ -899,11 +907,13 @@ export async function approveDepositAndUpdateBalance(
     }
 
     // ✅ FIX: Validate userId và amount match với deposit
-    if (deposit.user_id !== userId) {
+    // ✅ FIX: Ép kiểu cả 2 vế để tránh string vs number mismatch
+    if (Number(deposit.user_id) !== Number(userId)) {
       throw new Error('User ID mismatch with deposit');
     }
 
-    if (parseFloat(deposit.amount) !== amount) {
+    // ✅ FIX: So sánh amount với epsilon cho PostgreSQL decimal
+    if (Math.abs(parseFloat(deposit.amount) - Number(amount)) > 0.01) {
       throw new Error('Amount mismatch with deposit');
     }
 

@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProducts, getProductById, query } from '@/lib/database'
+import { getProducts, getProductById } from '@/lib/database-mysql'
 import { requireAdmin, validateRequest } from '@/lib/api-auth'
 import { checkRateLimitAndRespond } from '@/lib/rate-limit'
 import { productSchema } from '@/lib/validation-schemas'
 import { logError, createErrorResponse } from '@/lib/error-handler'
+import { query } from '@/lib/database-mysql'
 
 export const runtime = 'nodejs'
 
 /**
  * GET /api/products
- * Lấy danh sách products từ PostgreSQL
+ * Lấy danh sách products từ database
  */
 export async function GET(request: NextRequest) {
   try {
-    // Rate limiting - logic trong rate-limit sẽ tự động fallback nếu Redis tạch
+    // Rate limiting
     const rateLimitResponse = await checkRateLimitAndRespond(request, 30, 10, 'products-get');
     if (rateLimitResponse) {
       return rateLimitResponse;
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/products
- * Tạo product mới (admin only) - PostgreSQL
+ * Tạo product mới (admin only) — ✅ FIX: MySQL syntax thay vì PostgreSQL
  */
 export async function POST(request: NextRequest) {
   try {
@@ -97,13 +98,17 @@ export async function POST(request: NextRequest) {
 
     const productData = validation.data
 
-    // Create product trên PostgreSQL
+    // ✅ FIX: Dùng MySQL syntax (? placeholder) thay vì PostgreSQL ($1,$2)
     const sql = `
       INSERT INTO products (
         title, description, price, category, demo_url, download_url, image_url, tags, is_active, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-      RETURNING id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
+
+    // ✅ FIX: tags phải là JSON string cho MySQL, không phải array cho PostgreSQL
+    const tagsValue = Array.isArray(productData.tags)
+      ? JSON.stringify(productData.tags)
+      : productData.tags || '[]';
 
     const res = await query(sql, [
       productData.title,
@@ -113,12 +118,13 @@ export async function POST(request: NextRequest) {
       productData.demoUrl || null,
       productData.downloadUrl || null,
       productData.imageUrl || null,
-      productData.tags ? JSON.stringify(productData.tags) : null,
+      tagsValue,
       productData.isActive !== false,
     ]);
 
-    const newId = res[0]?.id;
-    const product = await getProductById(newId);
+    // ✅ FIX: MySQL trả về insertId thay vì RETURNING
+    const newId = (res as any).insertId;
+    const product = newId ? await getProductById(newId) : null;
 
     return NextResponse.json({
       success: true,
@@ -133,4 +139,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 

@@ -67,127 +67,88 @@ async function verifyAuthUser(request: NextRequest): Promise<{ email: string; ui
 
 export async function POST(request: NextRequest) {
   try {
-    // ✅ FIX: Thêm rate limiting để tránh spam messages
+    // ✅ Rate limiting
     const { checkRateLimitAndRespond } = await import('@/lib/rate-limit');
-    const rateLimitResponse = await checkRateLimitAndRespond(request, 10, 60, 'chat-post');
-    if (rateLimitResponse) {
-      return rateLimitResponse;
-    }
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 15, 60, 'chat-post');
+    if (rateLimitResponse) return rateLimitResponse;
 
     const authUser = await verifyAuthUser(request);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Vui lòng đăng nhập để sử dụng chat' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Vui lòng đăng nhập' }, { status: 401 });
     }
 
     const body = await request.json();
-
-    // Validate với Zod
     const validation = messageSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json({
-        success: false,
-        error: validation.error.errors[0]?.message || 'Dữ liệu không hợp lệ'
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: validation.error.errors[0]?.message }, { status: 400 });
     }
 
     const { receiverId, message } = validation.data;
-
-    // ✅ FIX: Sanitize message để tránh XSS
     const sanitizedMessage = sanitizeMessage(message);
 
-    if (!sanitizedMessage || sanitizedMessage.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'Message không được để trống sau khi sanitize'
-      }, { status: 400 });
+    if (!sanitizedMessage) {
+      return NextResponse.json({ success: false, error: 'Tin nhắn không hợp lệ' }, { status: 400 });
     }
 
-    // Get sender user_id từ email
-    const senderId = await getUserIdByEmail(authUser.email || '');
-
-    if (!senderId) {
-      return NextResponse.json({ success: false, error: 'User not found in database' }, { status: 404 });
-    }
-
-    // ✅ Check nếu sender là admin - kiểm tra cả admin table và users.role
-    const adminCheck = await query<any>(
-      `SELECT a.id 
-       FROM admin a
-       WHERE a.user_id = ?
-       UNION
-       SELECT u.id
-       FROM users u
-       WHERE u.id = ? AND u.role = 'admin'`,
-      [senderId, senderId]
+    // Lấy thông tin sender từ database
+    const sender = await queryOne<any>(
+      "SELECT id, role FROM users WHERE email = ?",
+      [authUser.email]
     );
 
-    const isAdmin = adminCheck.length > 0;
-
-    // Determine receiver và admin_id
-    let userId: number = senderId; // ✅ FIX: Initialize với senderId
-    let adminId: number | null = null;
-
-    if (isAdmin) {
-      // Admin gửi cho user cụ thể
-      if (!receiverId) {
-        return NextResponse.json({ success: false, error: 'Receiver ID required for admin messages' }, { status: 400 });
-      }
-      userId = receiverId;
-      adminId = senderId;
-    } else {
-      // User gửi cho admin → tìm admin user_id
-      try {
-        const adminResult = await query<any>(
-          `(SELECT id as user_id FROM users WHERE role = 'admin' LIMIT 1)
-           UNION ALL
-           (SELECT user_id as user_id FROM admin WHERE user_id IS NOT NULL LIMIT 1)
-           LIMIT 1`
-        );
-
-        if (adminResult.length > 0) {
-          adminId = adminResult[0].user_id;
-        } else {
-          // ✅ FIX: Nếu không tìm thấy admin, vẫn cho phép gửi tin nhắn (adminId = null)
-          // Tin nhắn sẽ được lưu và admin có thể xem sau
-          logger.warn('Admin not found, allowing message with adminId = null', { senderId });
-          adminId = null;
-        }
-      } catch (adminQueryError) {
-        logger.error('Error querying admin', adminQueryError, { senderId });
-        // Vẫn cho phép gửi tin nhắn với adminId = null
-        adminId = null;
-      }
+    if (!sender) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // Insert message vào bảng chats
+    // Kiểm tra quyền admin một cách tuyệt đối
+    const isAdmin = sender.role === 'admin';
+    const senderId = sender.id;
+
+    let targetUserId: number;
+    let targetAdminId: number | null;
+
+    if (isAdmin) {
+      // Admin đang reply cho một user cụ thể
+      if (!receiverId) {
+        return NextResponse.json({ success: false, error: 'Admin cần chọn khách hàng để gửi tin' }, { status: 400 });
+      }
+      targetUserId = receiverId;
+      targetAdminId = senderId;
+    } else {
+      // Khách hàng gửi cho admin
+      targetUserId = senderId;
+      // Tìm admin ID chính thức (nếu có)
+      const adminUser = await queryOne<any>("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+      targetAdminId = adminUser?.id || null;
+    }
+
+    // Lưu tin nhắn
     const result = await createChat({
-      userId,
-      adminId,
-      message: sanitizedMessage, // ✅ Dùng sanitized message
-      isAdmin,
+      userId: targetUserId, // Đây là "session ID" của hội thoại
+      adminId: targetAdminId,
+      message: sanitizedMessage,
+      isAdmin: isAdmin // Flag này xác định tin nhắn này của ai (true = của admin/ai, false = của khách)
     });
 
-    // ✅ Gemini Auto-Reply - Chỉ khi user gửi tin nhắn (không phải admin)
+    // ✅ Gemini Auto-Reply - Chỉ khi KHÁCH gửi tin nhắn (không phải admin)
+    // Và không có admin nào đang login để trả lời realtime (optional logic)
     let autoReplyMessage: any = null;
     if (!isAdmin && process.env.GEMINI_API_KEY && process.env.ENABLE_AUTO_REPLY === 'true') {
       try {
-        autoReplyMessage = await generateAutoReply(sanitizedMessage, userId);
+        autoReplyMessage = await generateAutoReply(sanitizedMessage, targetUserId);
 
         if (autoReplyMessage) {
-          // Lưu auto-reply vào database — đánh dấu sender_type = 'ai'
+          // Lưu AI reply
           await createChat({
-            userId,
-            adminId,
+            userId: targetUserId,
+            adminId: targetAdminId,
             message: `🤖 ${autoReplyMessage}`,
-            isAdmin: true, // Hiển thị bên trái (admin side)
+            isAdmin: true, // Tin nhắn AI tính là phía Admin
           });
         }
       } catch (autoReplyError) {
-        logger.warn('Auto-reply failed (non-critical)', {
-          userId,
-          error: autoReplyError instanceof Error ? autoReplyError.message : String(autoReplyError)
-        });
+        logger.warn('Auto-reply failed', { targetUserId, error: autoReplyError });
       }
     }
 
@@ -195,23 +156,17 @@ export async function POST(request: NextRequest) {
       success: true,
       message: {
         id: result.id,
-        userId,
-        adminId,
+        userId: targetUserId,
+        adminId: targetAdminId,
         message: sanitizedMessage,
         isAdmin,
-        senderType: isAdmin ? 'admin' : 'user',
         createdAt: result.createdAt
-      },
-      ...(autoReplyMessage && {
-        autoReply: {
-          message: autoReplyMessage,
-          senderType: 'ai'
-        }
-      })
+      }
     });
+
   } catch (error: any) {
-    logger.error('Chat POST error', error, { endpoint: '/api/chat' });
-    return NextResponse.json({ success: false, error: error.message || 'Internal server error' }, { status: 500 });
+    logger.error('Chat POST error', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
@@ -310,78 +265,107 @@ export async function GET(request: NextRequest) {
 async function generateAutoReply(userMessage: string, userId: number): Promise<string | null> {
   try {
     if (!process.env.GEMINI_API_KEY) {
-      return null;
+      return getSmartFallbackReply(userMessage);
     }
 
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     // Lấy lịch sử chat gần đây để context
-    const recentChats = await getChats(userId, undefined, 5, 0);
-    const chatHistory = recentChats
-      .slice(-5) // Lấy 5 tin nhắn gần nhất
-      .map(chat => `${chat.is_admin ? 'Admin' : 'Khách hàng'}: ${chat.message}`)
-      .join('\n');
+    let chatHistory = '';
+    try {
+      const recentChats = await getChats(userId, undefined, 5, 0);
+      chatHistory = recentChats
+        .slice(-5)
+        .map(chat => `${chat.is_admin ? 'Admin' : 'Khách hàng'}: ${chat.message}`)
+        .join('\n');
+    } catch { chatHistory = ''; }
 
-    // ✅ NEW: Lấy thông tin sản phẩm phổ biến để AI có thể trả lời về sản phẩm
-    const { getProducts } = await import('@/lib/database-mysql');
-    const popularProducts = await getProducts({ isActive: true, limit: 5 });
-    const productsList = popularProducts
-      .map((p, i) => `${i + 1}. ${p.title} - ${p.price ? `${p.price.toLocaleString('vi-VN')}đ` : 'Liên hệ'}${p.category ? ` (${p.category})` : ''}`)
-      .join('\n');
+    // ✅ FIX: Wrap getProducts trong try-catch riêng để tránh crash toàn bộ
+    let productsList = '';
+    let popularProducts: any[] = [];
+    try {
+      const { getProducts } = await import('@/lib/database-mysql');
+      popularProducts = await getProducts({ isActive: true, limit: 5 });
+      productsList = popularProducts
+        .map((p: any, i: number) => `${i + 1}. ${p.title} - ${p.price ? `${Number(p.price).toLocaleString('vi-VN')}đ` : 'Liên hệ'}${p.category ? ` (${p.category})` : ''}`)
+        .join('\n');
+    } catch (e) {
+      logger.warn('Failed to load products for AI context', { error: e instanceof Error ? e.message : String(e) });
+      productsList = 'Không tải được danh sách sản phẩm';
+    }
 
-    // ✅ NEW: Tìm sản phẩm được đề cập trong câu hỏi
+    // Tìm sản phẩm được đề cập trong câu hỏi
     const mentionedProduct = findMentionedProduct(userMessage, popularProducts);
 
-    const prompt = `Bạn là trợ lý AI chuyên nghiệp của một website bán source code. Nhiệm vụ của bạn là trả lời câu hỏi của khách hàng một cách thân thiện, chuyên nghiệp và hữu ích.
+    const prompt = `Bạn là trợ lý AI chuyên nghiệp của website QtusDev Market - chuyên bán source code. Trả lời ngắn gọn, thân thiện, chuyên nghiệp bằng tiếng Việt (tối đa 150 từ).
 
-Lịch sử chat gần đây:
-${chatHistory || 'Chưa có lịch sử'}
+Lịch sử chat: ${chatHistory || 'Chưa có'}
 
-${mentionedProduct ? `SẢN PHẨM ĐƯỢC ĐỀ CẬP:
-- Tên: ${mentionedProduct.title}
-- Mô tả: ${mentionedProduct.description || 'Chưa có mô tả'}
-- Giá: ${mentionedProduct.price ? `${mentionedProduct.price.toLocaleString('vi-VN')}đ` : 'Liên hệ'}
-- Danh mục: ${mentionedProduct.category || 'N/A'}
-${mentionedProduct.demo_url ? `- Demo: ${mentionedProduct.demo_url}` : ''}
+${mentionedProduct ? `SẢN PHẨM ĐƯỢC ĐỀ CẬP: ${mentionedProduct.title} - ${mentionedProduct.price ? `${Number(mentionedProduct.price).toLocaleString('vi-VN')}đ` : 'Liên hệ'} - ${mentionedProduct.description || ''}` : ''}
 
-` : ''}SẢN PHẨM PHỔ BIẾN HIỆN CÓ:
+SẢN PHẨM HIỆN CÓ:
 ${productsList || 'Chưa có sản phẩm'}
 
-Câu hỏi hiện tại của khách hàng: "${userMessage}"
+Câu hỏi khách hàng: "${userMessage}"
 
-Yêu cầu:
-- Trả lời bằng tiếng Việt
-- Ngắn gọn, rõ ràng (tối đa 200 từ)
-- Thân thiện, chuyên nghiệp
-${mentionedProduct ? '- Nếu câu hỏi về sản phẩm được đề cập, hãy sử dụng thông tin sản phẩm ở trên để trả lời chính xác' : ''}
-- Nếu khách hỏi về sản phẩm, hãy gợi ý từ danh sách sản phẩm phổ biến
-- Nếu không chắc chắn, hãy đề nghị khách hàng liên hệ admin
-- Không tự ý hứa hẹn về giá cả, thời gian giao hàng nếu không chắc chắn
-
-Trả lời:`;
+Yêu cầu: Trả lời bằng tiếng Việt, ngắn gọn, thân thiện. Nếu không chắc → đề nghị liên hệ admin.`;
 
     const result = await model.generateContent(prompt);
     const response = result.response;
     const reply = response.text().trim();
 
-    // Sanitize reply
     const sanitizedReply = sanitizeMessage(reply);
-
     if (!sanitizedReply || sanitizedReply.length === 0) {
-      return null;
+      return getSmartFallbackReply(userMessage);
     }
 
     logger.info('Auto-reply generated', { userId, messageLength: sanitizedReply.length });
     return sanitizedReply;
   } catch (error: any) {
-    logger.error('Gemini auto-reply error', { userId, error: error.stack || error.message });
-    if (error.message?.includes('429') || error.message?.includes('exceeded your current quota')) {
-      return "Hệ thống AI đang xử lý quá nhiều yêu cầu cùng lúc. Vui lòng thử lại sau ít phút hoặc đợi Admin phản hồi nhé!";
-    }
-    return "Xin lỗi, AI Assistant đang bảo trì tạm thời. Vui lòng để lại lời nhắn cho Admin.";
+    logger.error('Gemini auto-reply error', { userId, error: error.message });
+    // ✅ FIX: Trả lời thông minh thay vì "đang bảo trì"
+    return getSmartFallbackReply(userMessage);
   }
+}
+
+/**
+ * ✅ NEW: Smart fallback reply khi Gemini không hoạt động
+ * Phân tích keyword trong tin nhắn để trả lời cơ bản
+ */
+function getSmartFallbackReply(message: string): string {
+  const lower = message.toLowerCase();
+
+  if (lower.includes('giá') || lower.includes('bao nhiêu') || lower.includes('ưu đãi') || lower.includes('khuyến mãi')) {
+    return 'Giá hiển thị trên trang Sản phẩm. Cần tư vấn thêm? Admin sẽ hỗ trợ ngay!';
+  }
+
+  if (lower.includes('nạp') || lower.includes('thanh toán') || lower.includes('chuyển khoản')) {
+    return 'Vào Dashboard → Nạp tiền → Chuyển khoản → Nhập mã giao dịch. Admin sẽ duyệt sớm nhất!';
+  }
+
+  if (lower.includes('rút') || lower.includes('rút tiền')) {
+    return 'Vào Dashboard → Rút tiền, nhập ngân hàng + số tiền. Admin xử lý trong 24h.';
+  }
+
+  if (lower.includes('sản phẩm') || lower.includes('source') || lower.includes('code') || lower.includes('mã nguồn')) {
+    return 'Xem sản phẩm tại trang Sản phẩm. Cần tư vấn? Admin hỗ trợ ngay!';
+  }
+
+  if (lower.includes('hỗ trợ') || lower.includes('giúp') || lower.includes('help')) {
+    return 'Mô tả vấn đề cụ thể hơn nhé! Admin phản hồi trong 5-30 phút.';
+  }
+
+  if (lower.includes('bảo hành') || lower.includes('hoàn tiền') || lower.includes('chính sách')) {
+    return 'Bảo hành trọn đời, cài đặt miễn phí, hoàn tiền 7 ngày. Xem chi tiết tại trang Chính sách.';
+  }
+
+  if (lower.includes('hi') || lower.includes('hello') || lower.includes('xin chào') || lower.includes('chào')) {
+    return 'Xin chào! 👋 Bạn cần hỗ trợ gì? Tôi có thể giúp tìm sản phẩm, nạp tiền, hoặc giải đáp thắc mắc.';
+  }
+
+  return 'Tin nhắn đã ghi nhận! Admin phản hồi trong 5-30 phút. 🙏';
 }
 
 /**

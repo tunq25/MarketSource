@@ -1,27 +1,37 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import type { UserData } from "@/lib/userManager"
 import { userManager } from "@/lib/userManager"
 
 export function useCurrentUser() {
   const [user, setUser] = useState<UserData | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const fetchUser = useCallback(() => {
     userManager
       .getUser()
       .then(current => {
-        if (!cancelled) setUser(current)
+        setUser(current)
       })
       .catch(() => {
         setUser(null)
       })
+  }, [])
+
+  useEffect(() => {
+    fetchUser()
+
+    // ✅ FIX: Lắng nghe event 'userUpdated' để cập nhật reactive khi balance thay đổi
+    const handleUserUpdated = () => {
+      fetchUser()
+    }
+
+    window.addEventListener("userUpdated", handleUserUpdated)
 
     return () => {
-      cancelled = true
+      window.removeEventListener("userUpdated", handleUserUpdated)
     }
-  }, [])
+  }, [fetchUser])
 
   return user
 }

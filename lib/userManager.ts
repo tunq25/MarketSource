@@ -102,6 +102,12 @@ class UserManager {
       const map = this.readUsersMap()
       map[user.uid] = user
       this.writeUsersMap(map)
+
+      // ✅ FIX: Dispatch event để UI reactive cập nhật (balance, name, etc.)
+      try {
+        window.dispatchEvent(new Event('userUpdated'))
+      } catch (_) { /* SSR safe */ }
+
       return true
     } catch (error) {
       logger.warn("UserManager.cacheUserLocally failed", { error })

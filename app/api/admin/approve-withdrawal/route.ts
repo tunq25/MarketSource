@@ -124,17 +124,16 @@ export async function POST(request: NextRequest) {
         adminEmail
       );
 
-      // Sync với userManager (Firestore/localStorage) nếu userId là string uid
-      if (typeof userId === 'string') {
-        try {
-          const userData = await userManager.getUserData(userId);
-          if (userData) {
-            await userManager.updateBalance(userId, result.newBalance);
-          }
-        } catch (syncError) {
-          const { logger } = await import('@/lib/logger');
-          logger.warn('userManager sync failed (non-critical)', { error: syncError, userId });
+      // Sync với userManager (Firestore/localStorage)
+      try {
+        const stringUserId = String(userId);
+        const userData = await userManager.getUserData(stringUserId);
+        if (userData) {
+          await userManager.updateBalance(stringUserId, result.newBalance);
         }
+      } catch (syncError) {
+        const { logger } = await import('@/lib/logger');
+        logger.warn('userManager sync failed (non-critical)', { error: syncError, userId });
       }
 
       // ✅ FIX: Tạo notification cho user khi withdrawal được approve

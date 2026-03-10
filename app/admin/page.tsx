@@ -765,15 +765,19 @@ function AdminPageContent() {
       await processDepositApproval(deposit, adminUser);
 
       alert("Nạp tiền thành công!");
-    } catch (error) {
-      // ✅ FIX: Migrate console → logger
+
+      // ✅ FIX: Reload data ngay sau khi approve thành công
+      await loadData();
+    } catch (error: any) {
       const { logger } = await import('@/lib/logger');
       logger.error("Error approving deposit", error);
-      alert("Có lỗi xảy ra khi duyệt nạp tiền!");
+      // ✅ FIX: Hiện error message cụ thể từ server thay vì generic
+      const errorMsg = error?.message || error?.response?.data?.error || "Có lỗi xảy ra khi duyệt nạp tiền!";
+      alert(`Lỗi khi duyệt nạp tiền: ${errorMsg}`);
     } finally {
       setProcessingDeposit(null);
     }
-  }, [pendingDeposits, adminUser, processingDeposit, processDepositApproval]);
+  }, [pendingDeposits, adminUser, processingDeposit, processDepositApproval, loadData]);
 
   const rejectDeposit = useCallback(async (depositId: string) => {
     if (!confirm("Bạn có chắc chắn muốn từ chối yêu cầu này?")) return;
@@ -1425,26 +1429,36 @@ Hệ thống thông báo đang hoạt động bình thường.`
   }, [products, purchases])
 
   const financialRows = useMemo(() => {
-    const grouped: Record<string, { revenue: number; cost: number; tax: number }> = {}
+    const grouped: Record<string, { revenue: number; deposits: number; profit: number }> = {}
+
+    // Tính từ purchases (Doanh thu bán hàng)
     purchases.forEach((purchase: any) => {
       const date = new Date(purchase.purchaseDate || purchase.created_at)
       const key = `${date.getMonth() + 1}/${date.getFullYear()}`
       if (!grouped[key]) {
-        grouped[key] = { revenue: 0, cost: 0, tax: 0 }
+        grouped[key] = { revenue: 0, deposits: 0, profit: 0 }
       }
-      grouped[key].revenue += purchase.amount || 0
-      grouped[key].cost += (purchase.amount || 0) * 0.4
-      grouped[key].tax += (purchase.amount || 0) * 0.05
+      grouped[key].revenue += Number(purchase.amount || 0)
+    })
+
+    // Tính từ deposits (Tiền nạp vào hệ thống)
+    pendingDeposits.filter(d => d.status === 'approved').forEach((deposit: any) => {
+      const date = new Date(deposit.timestamp || deposit.created_at)
+      const key = `${date.getMonth() + 1}/${date.getFullYear()}`
+      if (!grouped[key]) {
+        grouped[key] = { revenue: 0, deposits: 0, profit: 0 }
+      }
+      grouped[key].deposits += Number(deposit.amount || 0)
     })
 
     return Object.entries(grouped).map(([period, data]) => ({
       period,
       revenue: Math.round(data.revenue),
-      cost: Math.round(data.cost),
-      profit: Math.round(data.revenue - data.cost - data.tax),
-      tax: Math.round(data.tax),
+      cost: Math.round(data.deposits), // Ở đây coi như tiền nạp là dòng tiền vào
+      profit: Math.round(data.revenue), // Lợi nhuận thực tế từ bán hàng
+      tax: Math.round(data.revenue * 0.1), // Giả định thuế 10%
     }))
-  }, [purchases])
+  }, [purchases, pendingDeposits])
 
   const toggleUserSelection = useCallback((userId: string) => {
     setSelectedUsersMap((prev) => ({ ...prev, [userId]: !prev[userId] }))

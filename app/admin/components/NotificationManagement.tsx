@@ -2,16 +2,18 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { logger } from "@/lib/logger-client"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Bell, Send, Users, User, Filter, Search, X } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Bell, Send, Users, User, Search, Mail, Eye, BellRing, Settings2 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface Notification {
   id: string | number
@@ -34,26 +36,33 @@ interface User {
 export function NotificationManagement() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [users, setUsers] = useState<User[]>([])
-  const [selectedUser, setSelectedUser] = useState<string>("all")
+  const [selectedFilterUser, setSelectedFilterUser] = useState<string>("all")
   const [filterType, setFilterType] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const [isSending, setIsSending] = useState(false)
 
   // Form state
   const [newNotification, setNewNotification] = useState({
-    userId: "",
-    userEmail: "",
+    userId: "all",
     type: "system" as const,
     title: "",
-    message: ""
+    message: "",
+    sendEmail: false,
+    sendSystem: true
   })
 
   // Load users
   const loadUsers = useCallback(async () => {
     try {
-      const result = await apiGet('/api/users')
+      // ✅ FIX: Dùng api/get-users được thiết kế cho admin
+      const result = await apiGet('/api/get-users')
       if (result.success && result.users) {
         setUsers(result.users)
+      } else if (Array.isArray(result.users)) {
+        setUsers(result.users)
+      } else if (result.data && Array.isArray(result.data)) {
+        setUsers(result.data)
       }
     } catch (error) {
       logger.error('Error loading users', error)
@@ -64,8 +73,6 @@ export function NotificationManagement() {
   const loadNotifications = useCallback(async () => {
     try {
       setIsLoading(true)
-      // Admin có thể xem tất cả notifications
-      // Cần tạo API endpoint riêng cho admin
       const result = await apiGet('/api/admin/notifications')
 
       if (result.success && result.notifications) {
@@ -76,7 +83,6 @@ export function NotificationManagement() {
       }
     } catch (error) {
       logger.error('Error loading notifications', error)
-      // Fallback: Load từ user notifications nếu admin endpoint chưa có
       setNotifications([])
     } finally {
       setIsLoading(false)
@@ -87,17 +93,16 @@ export function NotificationManagement() {
     loadUsers()
     loadNotifications()
 
-    // Auto-refresh every 30 seconds
     const interval = setInterval(loadNotifications, 30000)
     return () => clearInterval(interval)
   }, [loadUsers, loadNotifications])
 
   // Filter notifications
   const filteredNotifications = notifications.filter(n => {
-    const matchesUser = selectedUser === "all" || n.user_id.toString() === selectedUser
+    const matchesUser = selectedFilterUser === "all" || n.user_id?.toString() === selectedFilterUser
     const matchesType = filterType === "all" || n.type === filterType
     const matchesSearch = searchQuery === "" ||
-      n.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      n.message?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       n.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       n.user_email?.toLowerCase().includes(searchQuery.toLowerCase())
 
@@ -105,302 +110,303 @@ export function NotificationManagement() {
   })
 
   // Send notification
-  const sendNotification = useCallback(async () => {
+  const handleSendNotification = async () => {
     try {
       if (!newNotification.message) {
         alert("Vui lòng nhập nội dung thông báo!")
         return
       }
 
-      if (newNotification.userId === "all") {
-        // Gửi cho tất cả users
-        if (!confirm("Bạn có chắc chắn muốn gửi thông báo cho TẤT CẢ người dùng?")) {
-          return
-        }
-
-        // Gửi qua API batch xử lý hàng loạt
-        const res = await apiPost('/api/notifications/send-global', {
-          type: newNotification.type,
-          title: newNotification.title || "Thông báo hệ thống",
-          message: newNotification.message
-        })
-
-        if (res.success) {
-          alert(`Đã gửi thông báo cho tất cả người dùng!`)
-        } else {
-          alert(`Gửi thất bại: ${res.error}`)
-        }
-      } else {
-        // Gửi cho user cụ thể
-        const user = users.find(u => u.id.toString() === newNotification.userId)
-        if (!user) {
-          alert("Không tìm thấy người dùng!")
-          return
-        }
-
-        await apiPost('/api/notifications', {
-          userId: user.id,
-          userEmail: user.email,
-          type: newNotification.type,
-          title: newNotification.title || "Thông báo",
-          message: newNotification.message
-        })
-
-        alert("Đã gửi thông báo thành công!")
+      if (!newNotification.sendEmail && !newNotification.sendSystem) {
+        alert("Vui lòng chọn ít nhất một phương thức gửi (Hệ thống hoặc Email)!")
+        return
       }
 
-      // Reset form
-      setNewNotification({
-        userId: "",
-        userEmail: "",
-        type: "system",
-        title: "",
-        message: ""
-      })
+      setIsSending(true)
 
-      // Reload notifications
-      loadNotifications()
+      const payload = {
+        userId: newNotification.userId,
+        type: newNotification.type,
+        title: newNotification.title || "Thông báo từ quản trị viên",
+        message: newNotification.message,
+        sendEmail: newNotification.sendEmail,
+        sendSystem: newNotification.sendSystem
+      }
+
+      // ✅ Gửi qua API unified send-notification
+      const res = await apiPost('/api/admin/send-notification', payload)
+
+      if (res.success) {
+        alert(`Đã gửi thông báo thành công!`)
+        // Reset form
+        setNewNotification({
+          userId: "all",
+          type: "system",
+          title: "",
+          message: "",
+          sendEmail: false,
+          sendSystem: true
+        })
+        loadNotifications()
+      } else {
+        alert(`Gửi thất bại: ${res.error || "Lỗi không xác định"}`)
+      }
     } catch (error: any) {
       logger.error('Error sending notification', error)
-      alert("Có lỗi xảy ra khi gửi thông báo: " + (error.message || "Vui lòng thử lại"))
+      alert("Có lỗi xảy ra: " + (error.message || "Vui lòng thử lại"))
+    } finally {
+      setIsSending(false)
     }
-  }, [newNotification, users, loadNotifications])
+  }
 
-  // Get notification icon
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'deposit':
-        return '💰'
-      case 'withdraw':
-        return '💸'
-      case 'chat':
-        return '💬'
-      case 'promotion':
-        return '🎁'
-      default:
-        return '🔔'
+      case 'deposit': return '💰'
+      case 'withdraw': return '💸'
+      case 'chat': return '💬'
+      case 'promotion': return '🎁'
+      default: return '🔔'
     }
   }
 
-  // Get notification color
   const getNotificationColor = (type: string) => {
     switch (type) {
-      case 'deposit':
-        return 'bg-green-100 text-green-800'
-      case 'withdraw':
-        return 'bg-blue-100 text-blue-800'
-      case 'chat':
-        return 'bg-purple-100 text-purple-800'
-      case 'promotion':
-        return 'bg-yellow-100 text-yellow-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
+      case 'deposit': return 'bg-green-500/10 text-green-500 border-green-500/20'
+      case 'withdraw': return 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+      case 'chat': return 'bg-purple-500/10 text-purple-500 border-purple-500/20'
+      case 'promotion': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+      default: return 'bg-slate-500/10 text-slate-500 border-slate-500/20'
     }
   }
-
-  const unreadCount = notifications.filter(n => !n.is_read).length
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Quản lý thông báo</h2>
-          <p className="text-muted-foreground">Gửi và quản lý thông báo cho người dùng</p>
+          <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Trung tâm Thông báo
+          </h2>
+          <p className="text-muted-foreground">Phát hành thông báo hệ thống và gửi email marketing</p>
         </div>
-        <Badge className="bg-blue-600 text-white">
-          {unreadCount} chưa đọc
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="px-3 py-1 border-blue-500/30 text-blue-500 bg-blue-500/5">
+            <BellRing className="w-3 h-3 mr-1.5" />
+            {notifications.filter(n => !n.is_read).length} thông báo mới
+          </Badge>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Send Notification Form */}
-        <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Send className="w-5 h-5 mr-2" />
-              Gửi thông báo mới
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Form Gửi - 5 columns */}
+        <Card className="lg:col-span-5 border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden glass-panel">
+          <CardHeader className="border-b border-white/10 bg-slate-50/50 dark:bg-slate-900/50">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
+                <Send className="w-4 h-4" />
+              </div>
+              Tạo thông báo mới
             </CardTitle>
+            <CardDescription>Chọn đối tượng và phương thức liên lạc</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="notification-type">Loại thông báo</Label>
-              <Select
-                value={newNotification.type}
-                onValueChange={(value: any) => setNewNotification({ ...newNotification, type: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="system">Hệ thống</SelectItem>
-                  <SelectItem value="deposit">Nạp tiền</SelectItem>
-                  <SelectItem value="withdraw">Rút tiền</SelectItem>
-                  <SelectItem value="chat">Chat</SelectItem>
-                  <SelectItem value="promotion">Khuyến mãi</SelectItem>
-                </SelectContent>
-              </Select>
+          <CardContent className="p-6 space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider opacity-60">Loại</Label>
+                <Select
+                  value={newNotification.type}
+                  onValueChange={(value: any) => setNewNotification({ ...newNotification, type: value })}
+                >
+                  <SelectTrigger className="bg-white/5 border-white/10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">Hệ thống</SelectItem>
+                    <SelectItem value="promotion">Khuyến mãi</SelectItem>
+                    <SelectItem value="chat">Tin nhắn</SelectItem>
+                    <SelectItem value="deposit">Tài chính</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider opacity-60">Người nhận</Label>
+                <Select
+                  value={newNotification.userId}
+                  onValueChange={(value) => setNewNotification({ ...newNotification, userId: value })}
+                >
+                  <SelectTrigger className="bg-white/5 border-white/10">
+                    <SelectValue placeholder="Chọn..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">🚀 Tất cả người dùng ({users.length})</SelectItem>
+                    <ScrollArea className="h-60">
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id.toString()}>
+                          {user.name || user.email.split('@')[0]}
+                        </SelectItem>
+                      ))}
+                    </ScrollArea>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div>
-              <Label htmlFor="notification-user">Gửi đến</Label>
-              <Select
-                value={newNotification.userId}
-                onValueChange={(value) => setNewNotification({ ...newNotification, userId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn người dùng" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    <div className="flex items-center">
-                      <Users className="w-4 h-4 mr-2" />
-                      Tất cả người dùng
-                    </div>
-                  </SelectItem>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={user.id.toString()}>
-                      <div className="flex items-center">
-                        <User className="w-4 h-4 mr-2" />
-                        {user.name} ({user.email})
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="notification-title">Tiêu đề (tùy chọn)</Label>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider opacity-60">Tiêu đề</Label>
               <Input
-                id="notification-title"
                 value={newNotification.title}
                 onChange={(e) => setNewNotification({ ...newNotification, title: e.target.value })}
-                placeholder="Tiêu đề thông báo"
+                placeholder="Nhập tiêu đề thu hút..."
+                className="bg-white/5 border-white/10 focus:ring-blue-500"
               />
             </div>
 
-            <div>
-              <Label htmlFor="notification-message">Nội dung thông báo *</Label>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider opacity-60">Nội dung</Label>
               <Textarea
-                id="notification-message"
                 value={newNotification.message}
                 onChange={(e) => setNewNotification({ ...newNotification, message: e.target.value })}
-                placeholder="Nhập nội dung thông báo..."
-                rows={5}
-                required
+                placeholder="Nội dung truyền tải..."
+                rows={6}
+                className="bg-white/5 border-white/10 focus:ring-blue-500 resize-none"
               />
             </div>
 
-            <Button onClick={sendNotification} className="w-full">
-              <Send className="w-4 h-4 mr-2" />
-              Gửi thông báo
+            <div className="p-4 rounded-xl bg-slate-500/5 border border-white/5 space-y-4">
+              <Label className="text-xs font-bold uppercase tracking-wider opacity-60 flex items-center gap-2">
+                <Settings2 className="w-3 h-3" />
+                Phương thức gửi
+              </Label>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Bảng tin hệ thống</p>
+                    <p className="text-[10px] text-muted-foreground">Xuất hiện trong chuông thông báo</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={newNotification.sendSystem}
+                  onCheckedChange={(v) => setNewNotification({ ...newNotification, sendSystem: v })}
+                />
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/10 text-purple-500">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Gửi tới Gmail</p>
+                    <p className="text-[10px] text-muted-foreground">Gửi trực tiếp vào hòm thư khách</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={newNotification.sendEmail}
+                  onCheckedChange={(v) => setNewNotification({ ...newNotification, sendEmail: v })}
+                />
+              </div>
+            </div>
+
+            <Button
+              onClick={handleSendNotification}
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold h-12 rounded-xl transition-all active:scale-95 disabled:opacity-50"
+              disabled={isSending}
+            >
+              {isSending ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Phát hành thông báo
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Notifications List */}
-        <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Bell className="w-5 h-5 mr-2" />
-              Danh sách thông báo ({filteredNotifications.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {/* Filters */}
-            <div className="space-y-4 mb-4">
-              <div className="flex items-center space-x-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+        {/* Danh sách - 7 columns */}
+        <Card className="lg:col-span-7 border-slate-200 dark:border-slate-800 shadow-xl glass-panel">
+          <Tabs defaultValue="all" className="w-full">
+            <CardHeader className="border-b border-white/10 p-0">
+              <div className="px-6 pt-6 pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-blue-500" />
+                  Lịch sử thông báo
+                </CardTitle>
+              </div>
+              <div className="px-6 pb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Tìm kiếm..."
+                    placeholder="Tìm theo tiêu đề, nội dung hoặc email..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 bg-white/5 border-white/10"
                   />
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <Select value={selectedUser} onValueChange={setSelectedUser}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Người dùng" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả</SelectItem>
-                    {users.map((user) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Loại" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả</SelectItem>
-                    <SelectItem value="system">Hệ thống</SelectItem>
-                    <SelectItem value="deposit">Nạp tiền</SelectItem>
-                    <SelectItem value="withdraw">Rút tiền</SelectItem>
-                    <SelectItem value="chat">Chat</SelectItem>
-                    <SelectItem value="promotion">Khuyến mãi</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+              <TabsList className="w-full justify-start rounded-none bg-transparent h-12 px-6 border-t border-white/5">
+                <TabsTrigger value="all" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none h-full transition-none">Tất cả</TabsTrigger>
+                <TabsTrigger value="system" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none h-full transition-none">Hệ thống</TabsTrigger>
+                <TabsTrigger value="promotion" className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none h-full transition-none">Khuyến mãi</TabsTrigger>
+              </TabsList>
+            </CardHeader>
 
-            {/* Notifications */}
-            {isLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-                <p className="text-sm text-muted-foreground mt-2">Đang tải...</p>
-              </div>
-            ) : filteredNotifications.length === 0 ? (
-              <div className="text-center py-8">
-                <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-                <p className="text-muted-foreground">Không có thông báo nào</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                {filteredNotifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`p-3 border rounded-lg ${!notification.is_read
-                        ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-200'
-                        : 'bg-white dark:bg-gray-800'
-                      }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-xl">
-                            {getNotificationIcon(notification.type)}
-                          </span>
-                          <Badge className={getNotificationColor(notification.type)}>
-                            {notification.type}
-                          </Badge>
-                          {!notification.is_read && (
-                            <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                          )}
-                        </div>
-                        <h4 className="font-semibold text-sm mb-1">
-                          {notification.title || 'Thông báo'}
-                        </h4>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          {notification.message}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          👤 {notification.user_email || 'Unknown'} • {new Date(notification.created_at).toLocaleString('vi-VN')}
-                        </p>
-                      </div>
-                    </div>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[650px]">
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center h-full py-20 grayscale opacity-50">
+                    <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin mb-4" />
+                    <p className="text-sm font-medium">Đang truy vấn dữ liệu...</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
+                ) : filteredNotifications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 opacity-30">
+                    <Bell className="w-16 h-16 mb-4" />
+                    <p className="font-semibold">Trống rỗng</p>
+                    <p className="text-xs">Chưa có thông báo nào được lưu lại</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-white/5">
+                    {filteredNotifications.map((n) => (
+                      <div key={n.id} className="p-4 hover:bg-white/5 transition-colors group">
+                        <div className="flex gap-4">
+                          <div className="text-2xl pt-1">{getNotificationIcon(n.type)}</div>
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <Badge variant="outline" className={getNotificationColor(n.type)}>
+                                {n.type}
+                              </Badge>
+                              <span className="text-[10px] opacity-40 italic">
+                                {new Date(n.created_at).toLocaleString('vi-VN')}
+                              </span>
+                            </div>
+                            <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                              {n.title}
+                            </h4>
+                            <p className="text-xs text-muted-foreground line-clamp-2 group-hover:line-clamp-none transition-all">
+                              {n.message}
+                            </p>
+                            <div className="pt-2 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <User className="w-3 h-3 opacity-40" />
+                                <span className="text-[10px] font-medium opacity-60">
+                                  {n.user_email || "Toàn hệ thống"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 grayscale opacity-50 text-[10px]">
+                                {n.is_read ? <Badge variant="secondary" className="px-1 py-0 h-4">Đã xem</Badge> : <Badge className="px-1 py-0 h-4 bg-blue-500">Mới</Badge>}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Tabs>
         </Card>
       </div>
     </div>
