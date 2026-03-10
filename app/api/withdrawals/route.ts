@@ -140,18 +140,20 @@ export async function POST(request: NextRequest): Promise<Response> {
       [result.id],
     );
 
-    notifyWithdrawalRequest({
-      userName: authUser.email?.split('@')[0],
-      userEmail: authUser.email || undefined,
-      amount: withdrawalData.amount,
-      bankName: withdrawalData.bankName,
-      accountNumber: withdrawalData.accountNumber,
-      accountName: withdrawalData.accountName,
-      ipAddress: withdrawalData.ipAddress,
-      deviceInfo: withdrawalData.deviceInfo,
-    }).catch((error) => {
+    try {
+      await notifyWithdrawalRequest({
+        userName: authUser.email?.split('@')[0],
+        userEmail: authUser.email || undefined,
+        amount: withdrawalData.amount,
+        bankName: withdrawalData.bankName,
+        accountNumber: withdrawalData.accountNumber,
+        accountName: withdrawalData.accountName,
+        ipAddress: withdrawalData.ipAddress,
+        deviceInfo: withdrawalData.deviceInfo,
+      });
+    } catch (error: any) {
       logger.warn('Failed to notify withdrawal request', { error: error?.message });
-    });
+    }
 
     return NextResponse.json({
       success: true,

@@ -10,6 +10,16 @@ type DeviceInfo = {
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
+function escapeHTML(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function formatDeviceInfo(deviceInfo?: DeviceInfo) {
   if (!deviceInfo) {
     return 'Thiết bị: Unknown';
@@ -29,7 +39,10 @@ async function sendTelegramMessage(message: string) {
   }
 
   try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -37,7 +50,18 @@ async function sendTelegramMessage(message: string) {
         text: message,
         parse_mode: 'HTML',
       }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      logger.error('Telegram API error', new Error(JSON.stringify(errorData)), {
+        status: response.status,
+        statusText: response.statusText
+      });
+    }
   } catch (error) {
     logger.error('Telegram notification failed', error);
   }
@@ -54,12 +78,12 @@ export async function notifyDepositRequest(payload: {
 }) {
   const message = `💳 <b>YÊU CẦU NẠP TIỀN MỚI</b>
 
-👤 <b>Khách hàng:</b> ${payload.userName || 'Unknown'}
-📧 <b>Email:</b> ${payload.userEmail || 'Unknown'}
+👤 <b>Khách hàng:</b> ${escapeHTML(payload.userName || 'Unknown')}
+📧 <b>Email:</b> ${escapeHTML(payload.userEmail || 'Unknown')}
 💰 <b>Số tiền:</b> ${payload.amount.toLocaleString('vi-VN')}đ
-🏦 <b>Phương thức:</b> ${payload.method}
-📝 <b>Mã giao dịch:</b> ${payload.transactionId}
-🌐 <b>IP:</b> ${payload.ipAddress || 'Unknown'}
+🏦 <b>Phương thức:</b> ${escapeHTML(payload.method)}
+📝 <b>Mã giao dịch:</b> ${escapeHTML(payload.transactionId)}
+🌐 <b>IP:</b> ${escapeHTML(payload.ipAddress || 'Unknown')}
 📱 <b>${formatDeviceInfo(payload.deviceInfo)}
 
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
@@ -81,12 +105,12 @@ export async function notifyWithdrawalRequest(payload: {
 }) {
   const message = `💸 <b>YÊU CẦU RÚT TIỀN MỚI</b>
 
-👤 <b>Khách hàng:</b> ${payload.userName || 'Unknown'}
-📧 <b>Email:</b> ${payload.userEmail || 'Unknown'}
+👤 <b>Khách hàng:</b> ${escapeHTML(payload.userName || 'Unknown')}
+📧 <b>Email:</b> ${escapeHTML(payload.userEmail || 'Unknown')}
 💰 <b>Số tiền:</b> ${payload.amount.toLocaleString('vi-VN')}đ
-🏦 <b>Ngân hàng:</b> ${payload.bankName}
-📝 <b>Tài khoản:</b> ${payload.accountName} - ${payload.accountNumber}
-🌐 <b>IP:</b> ${payload.ipAddress || 'Unknown'}
+🏦 <b>Ngân hàng:</b> ${escapeHTML(payload.bankName)}
+📝 <b>Tài khoản:</b> ${escapeHTML(payload.accountName)} - ${escapeHTML(payload.accountNumber)}
+🌐 <b>IP:</b> ${escapeHTML(payload.ipAddress || 'Unknown')}
 📱 <b>${formatDeviceInfo(payload.deviceInfo)}
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
 
@@ -102,8 +126,8 @@ export async function notifyPasswordReset(payload: {
 }) {
   const message = `🔄 <b>YÊU CẦU ĐẶT LẠI MẬT KHẨU</b>
 
-📧 <b>Email:</b> ${payload.email}
-🌐 <b>IP:</b> ${payload.ipAddress || 'Unknown'}
+📧 <b>Email:</b> ${escapeHTML(payload.email)}
+🌐 <b>IP:</b> ${escapeHTML(payload.ipAddress || 'Unknown')}
 📱 <b>${formatDeviceInfo(payload.deviceInfo)}
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
 
@@ -132,9 +156,9 @@ export async function notifyPurchaseSuccess(payload: {
 }) {
   const message = `🛒 <b>ĐƠN HÀNG MỚI</b>
 
-👤 <b>Khách hàng:</b> ${payload.userName || 'Unknown'}
-📧 <b>Email:</b> ${payload.userEmail || 'Unknown'}
-🛍️ <b>Sản phẩm:</b> ${payload.productTitle}
+👤 <b>Khách hàng:</b> ${escapeHTML(payload.userName || 'Unknown')}
+📧 <b>Email:</b> ${escapeHTML(payload.userEmail || 'Unknown')}
+🛍️ <b>Sản phẩm:</b> ${escapeHTML(payload.productTitle)}
 💰 <b>Giá trị:</b> ${payload.amount.toLocaleString('vi-VN')}đ
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
 
@@ -151,9 +175,9 @@ export async function notifyNewUserRegistration(payload: {
 }) {
   const message = `🆕 <b>NGƯỜI DÙNG MỚI ĐĂNG KÝ</b>
 
-👤 <b>Tên:</b> ${payload.userName || 'Unknown'}
-📧 <b>Email:</b> ${payload.userEmail || 'Unknown'}
-🌐 <b>IP:</b> ${payload.ipAddress || 'Unknown'}
+👤 <b>Tên:</b> ${escapeHTML(payload.userName || 'Unknown')}
+📧 <b>Email:</b> ${escapeHTML(payload.userEmail || 'Unknown')}
+🌐 <b>IP:</b> ${escapeHTML(payload.ipAddress || 'Unknown')}
 📱 <b>${formatDeviceInfo(payload.deviceInfo)}
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
 

@@ -152,9 +152,11 @@ export async function POST(request: NextRequest): Promise<Response> {
       deviceInfo: depositData.deviceInfo,
     };
 
-    notifyDepositRequest(notifyPayload).catch((error) => {
+    try {
+      await notifyDepositRequest(notifyPayload);
+    } catch (error: any) {
       logger.warn('Failed to notify deposit request', { error: error?.message });
-    });
+    }
 
     return NextResponse.json({
       success: true,
