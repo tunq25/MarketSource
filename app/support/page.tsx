@@ -14,34 +14,20 @@ import { Footer } from "@/components/footer"
 import { apiPost, apiGet } from "@/lib/api-client"
 import dynamic from "next/dynamic"
 
-// Lazy load Three.js components để tối ưu performance
-const ThreeJSProductShowcase = dynamic(
+const ThemeAwareBackground = dynamic(
   async () => {
     try {
-      const mod = await import("@/components/three-js-product-showcase")
-      return { default: mod.ThreeJSProductShowcase }
+      const mod = await import("@/components/theme-aware-background")
+      return { default: mod.ThemeAwareBackground }
     } catch (error) {
-      logger.error('Failed to load ThreeJS Product Showcase component', error)
+      logger.error('Failed to load ThemeAwareBackground component', error)
       throw error
     }
   },
   {
     ssr: false,
-    loading: () => <div className="absolute inset-0 bg-gradient-to-b from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900" />
+    loading: () => <div className="absolute inset-0 bg-blue-50 dark:bg-[#0B0C10]" />
   }
-)
-
-const ThreeDFallback = dynamic(
-  async () => {
-    try {
-      const mod = await import("@/components/3d-fallback")
-      return { default: mod.ThreeDFallback }
-    } catch (error) {
-      logger.error('Failed to load 3D Fallback component', error)
-      throw error
-    }
-  },
-  { ssr: false }
 )
 
 export default function SupportPage() {
@@ -313,13 +299,8 @@ export default function SupportPage() {
   ]
 
   return (
-    <div className="bg-white dark:bg-gray-900 min-h-screen relative">
-      {/* 3D Background */}
-      <div className="absolute inset-0">
-        <ThreeJSProductShowcase />
-        <ThreeDFallback />
-      </div>
-
+    <div className="bg-transparent min-h-screen relative overflow-x-hidden pt-20 transition-colors duration-300">
+      <ThemeAwareBackground />
       <FloatingHeader />
 
       <main className="container mx-auto px-4 py-24 relative z-10">
@@ -338,7 +319,7 @@ export default function SupportPage() {
           {contactMethods.map((method, index) => (
             <Card
               key={index}
-              className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-purple-500/50 transition-all duration-300 group"
+              className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl hover:border-purple-500/50 transition-all duration-300 group relative z-10"
             >
               <CardContent className="p-6 text-center">
                 <div
@@ -364,23 +345,23 @@ export default function SupportPage() {
 
         {/* Support Tabs */}
         <Tabs defaultValue="faq" className="space-y-8">
-          <TabsList className="bg-white/10 backdrop-blur-sm border-white/20 grid w-full grid-cols-3">
-            <TabsTrigger value="faq" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+          <TabsList className="bg-black/5 dark:bg-white/10 backdrop-blur-sm border-black/10 dark:border-white/20 grid w-full grid-cols-3">
+            <TabsTrigger value="faq" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-gray-600 dark:text-gray-300">
               <HelpCircle className="w-4 h-4 mr-2" />
               FAQ
             </TabsTrigger>
-            <TabsTrigger value="contact" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+            <TabsTrigger value="contact" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-gray-600 dark:text-gray-300">
               <Mail className="w-4 h-4 mr-2" />
               Liên hệ
             </TabsTrigger>
-            <TabsTrigger value="guides" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
+            <TabsTrigger value="guides" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white text-gray-600 dark:text-gray-300">
               <FileText className="w-4 h-4 mr-2" />
               Hướng dẫn
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="faq" className="space-y-6">
-            <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+            <Card className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl relative z-10">
               <CardHeader>
                 <CardTitle className="text-gray-900 dark:text-gray-100">Câu hỏi thường gặp</CardTitle>
                 <CardDescription className="text-gray-600 dark:text-gray-400">
@@ -390,7 +371,7 @@ export default function SupportPage() {
               <CardContent>
                 <div className="space-y-6">
                   {faqs.map((faq, index) => (
-                    <div key={index} className="border-b border-white/10 pb-6 last:border-b-0">
+                    <div key={index} className="border-b border-black/10 dark:border-white/10 pb-6 last:border-b-0">
                       <h3 className="text-gray-900 dark:text-gray-100 font-semibold text-lg mb-3">{faq.question}</h3>
                       <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{faq.answer}</p>
                     </div>
@@ -404,7 +385,7 @@ export default function SupportPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Chat với Admin (nếu đã đăng nhập) */}
               {currentUser ? (
-                <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                <Card className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl relative z-10">
                   <CardHeader>
                     <CardTitle className="text-gray-900 dark:text-gray-100 flex items-center">
                       <MessageCircle className="w-5 h-5 mr-2" />
@@ -451,7 +432,7 @@ export default function SupportPage() {
                                     </span>
                                     {!isMe && (
                                       <Badge variant="outline" className={`text-[10px] py-0 h-4 border-none ${isAI ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300'
-                                          : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300'
+                                        : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300'
                                         }`}>
                                         {isAI ? '24/7' : 'Support'}
                                       </Badge>
@@ -461,8 +442,8 @@ export default function SupportPage() {
                                   {/* Message Bubble */}
                                   <div
                                     className={`relative px-4 py-2.5 rounded-2xl text-sm ${isMe
-                                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-sm shadow-md'
-                                        : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-sm border border-gray-100 dark:border-gray-700 shadow-sm'
+                                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-sm shadow-md'
+                                      : 'bg-white/80 dark:bg-gray-800/80 backdrop-blur-md text-gray-900 dark:text-gray-100 rounded-bl-sm border border-black/5 dark:border-gray-700 shadow-sm'
                                       }`}
                                   >
                                     <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
@@ -484,7 +465,7 @@ export default function SupportPage() {
                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center flex-shrink-0">
                               <Bot className="w-4 h-4 text-white" />
                             </div>
-                            <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-1">
+                            <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border border-black/5 dark:border-gray-700 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-1">
                               <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                               <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                               <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -495,7 +476,7 @@ export default function SupportPage() {
                       </div>
 
                       {/* Message Input */}
-                      <div className="p-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
+                      <div className="p-3 bg-white/50 dark:bg-gray-900/50 backdrop-blur-xl border-t border-black/10 dark:border-gray-800">
                         {error && (
                           <p className="text-xs text-red-500 mb-2 px-2 animate-fade-in">{error}</p>
                         )}
@@ -514,7 +495,7 @@ export default function SupportPage() {
                               }
                             }}
                             rows={1}
-                            className="min-h-[44px] max-h-[120px] resize-none rounded-xl pr-12 bg-gray-100 dark:bg-gray-800 border-transparent focus:border-purple-500 focus:bg-white dark:focus:bg-gray-900 transition-all text-sm"
+                            className="min-h-[44px] max-h-[120px] resize-none rounded-xl pr-12 bg-black/5 dark:bg-gray-800/80 border-transparent focus:border-purple-500 focus:bg-white/80 dark:focus:bg-gray-900/80 text-gray-900 dark:text-white transition-all text-sm backdrop-blur-sm"
                           />
                           <Button
                             onClick={handleSendChatMessage}
@@ -530,7 +511,7 @@ export default function SupportPage() {
                   </CardContent>
                 </Card>
               ) : (
-                <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                <Card className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl relative z-10">
                   <CardHeader>
                     <CardTitle className="text-gray-900 dark:text-gray-100">Đăng nhập để chat</CardTitle>
                     <CardDescription className="text-gray-600 dark:text-gray-400">
@@ -548,7 +529,7 @@ export default function SupportPage() {
               )}
 
               {/* Contact Form */}
-              <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+              <Card className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl relative z-10">
                 <CardHeader>
                   <CardTitle className="text-gray-900 dark:text-gray-100">Gửi tin nhắn</CardTitle>
                   <CardDescription className="text-gray-600 dark:text-gray-400">
@@ -564,7 +545,7 @@ export default function SupportPage() {
                           placeholder="Nguyễn Văn A"
                           value={contactForm.name}
                           onChange={(e) => setContactForm(prev => ({ ...prev, name: e.target.value }))}
-                          className="bg-white/5 border-white/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+                          className="bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                         />
                       </div>
                       <div>
@@ -574,7 +555,7 @@ export default function SupportPage() {
                           placeholder="your@email.com"
                           value={contactForm.email}
                           onChange={(e) => setContactForm(prev => ({ ...prev, email: e.target.value }))}
-                          className="bg-white/5 border-white/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+                          className="bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                         />
                       </div>
                     </div>
@@ -584,7 +565,7 @@ export default function SupportPage() {
                         placeholder="Vấn đề cần hỗ trợ"
                         value={contactForm.subject}
                         onChange={(e) => setContactForm(prev => ({ ...prev, subject: e.target.value }))}
-                        className="bg-white/5 border-white/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+                        className="bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                       />
                     </div>
                     <div>
@@ -594,7 +575,7 @@ export default function SupportPage() {
                         rows={5}
                         value={contactForm.message}
                         onChange={(e) => setContactForm(prev => ({ ...prev, message: e.target.value }))}
-                        className="bg-white/5 border-white/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+                        className="bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/20 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                       />
                     </div>
                     <Button
@@ -607,7 +588,7 @@ export default function SupportPage() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+              <Card className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl relative z-10">
                 <CardHeader>
                   <CardTitle className="text-gray-900 dark:text-gray-100">Thông tin liên hệ</CardTitle>
                   <CardDescription className="text-gray-600 dark:text-gray-400">Các cách khác để liên hệ với chúng tôi</CardDescription>
@@ -728,7 +709,7 @@ export default function SupportPage() {
               ].map((guide, index) => (
                 <Card
                   key={index}
-                  className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-purple-500/50 transition-all duration-300 group cursor-pointer"
+                  className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-black/5 dark:border-gray-700 hover:border-purple-500/50 transition-all duration-300 group cursor-pointer shadow-sm"
                 >
                   <CardContent className="p-6">
                     <div className="flex items-center space-x-4 mb-4">
@@ -745,7 +726,7 @@ export default function SupportPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-white/20 text-white hover:bg-white/10 bg-transparent"
+                      className="border-black/10 dark:border-white/20 text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 bg-transparent"
                     >
                       Xem hướng dẫn
                     </Button>

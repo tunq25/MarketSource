@@ -13,19 +13,19 @@ import Image from "next/image"
 import dynamic from "next/dynamic"
 
 // Lazy load Three.js components để tối ưu performance
-const MeteorShowerBackdrop = dynamic(
+const ThemeAwareBackground = dynamic(
   async () => {
     try {
-      const mod = await import("@/components/meteor-shower-3d")
-      return { default: mod.MeteorShower3D }
+      const mod = await import("@/components/theme-aware-background")
+      return { default: mod.ThemeAwareBackground }
     } catch (error) {
-      logger.error('Failed to load MeteorShower3D component', error)
+      logger.error('Failed to load ThemeAwareBackground component', error)
       throw error
     }
   },
   {
     ssr: false,
-    loading: () => <div className="absolute inset-0 bg-[#0B0C10]" />
+    loading: () => <div className="absolute inset-0 bg-blue-50 dark:bg-[#0B0C10]" />
   }
 )
 
@@ -42,7 +42,10 @@ const ThreeDFallback = dynamic(
   { ssr: false }
 )
 
+import { useRouter } from "next/navigation"
+
 export default function CategoriesPage() {
+  const router = useRouter()
   const [products, setProducts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -164,11 +167,9 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300 relative">
-      {/* 3D Background */}
-      <div className="absolute inset-0 pointer-events-none">
-        <MeteorShowerBackdrop />
-      </div>
+    <div className="bg-transparent min-h-screen transition-colors duration-300 relative overflow-hidden">
+      {/* Nền tự động đổi theo Theme */}
+      <ThemeAwareBackground />
 
       <FloatingHeader />
 
@@ -194,7 +195,7 @@ export default function CategoriesPage() {
             return (
               <Card
                 key={category.id}
-                className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-purple-500/50 transition-all duration-300 group"
+                className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl hover:border-purple-500/50 transition-all duration-300 group relative z-10"
               >
                 <CardHeader>
                   <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-r ${category.color} mb-4 group-hover:scale-110 transition-transform duration-300`}>
@@ -222,7 +223,7 @@ export default function CategoriesPage() {
                   {/* Featured products from this category */}
                   <div className="space-y-3">
                     {categoryProducts.slice(0, 2).map((product) => (
-                      <div key={product.id} className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                      <div key={product.id} className="flex items-center space-x-3 p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
                         <Image
                           src={product.image || "/placeholder.svg"}
                           alt={product.title}
@@ -273,7 +274,8 @@ export default function CategoriesPage() {
               {products.slice(0, 6).map((product) => (
                 <Card
                   key={product.id}
-                  className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-purple-500/50 transition-all duration-300 group overflow-hidden"
+                  className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl hover:border-purple-500/50 transition-all duration-300 group overflow-hidden cursor-pointer relative z-10"
+                  onClick={() => router.push(`/product/${product.id}`)}
                 >
                   <div className="relative">
                     <Image
@@ -331,7 +333,7 @@ export default function CategoriesPage() {
 
                     <div className="flex space-x-2">
                       <Button
-                        onClick={() => handleAddToCart(product)}
+                        onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
                         className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
                       >
                         <ShoppingCart className="w-4 h-4 mr-2" />
@@ -342,7 +344,7 @@ export default function CategoriesPage() {
                           variant="outline"
                           size="sm"
                           className="border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
-                          onClick={() => window.open(product.demoLink, "_blank")}
+                          onClick={(e) => { e.stopPropagation(); window.open(product.demoLink, "_blank"); }}
                         >
                           <Eye className="w-4 h-4" />
                         </Button>

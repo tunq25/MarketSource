@@ -172,6 +172,20 @@ export async function POST(request: NextRequest) {
       logger.warn('Failed to notify purchase success', { error: error?.message });
     });
 
+    // ✅ Gửi mail cám ơn mua hàng thành công
+    if (authUser.email) {
+      try {
+        const { sendPurchaseConfirmationEmail } = await import('@/lib/email');
+        await sendPurchaseConfirmationEmail(
+          authUser.email, 
+          product?.title || `Sản phẩm #${productIdNum}`, 
+          purchaseData.amount
+        );
+      } catch (emailError) {
+        logger.error('Failed to send purchase confirmation email', emailError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       purchaseId: result.id,

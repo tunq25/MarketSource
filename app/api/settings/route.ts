@@ -37,6 +37,33 @@ async function ensureSettingsTable() {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             `);
         }
+        // Auto-migrate new Product columns
+        const addColumnsSql = isPostgres
+            ? `
+                ALTER TABLE products 
+                ADD COLUMN IF NOT EXISTS detailed_description TEXT,
+                ADD COLUMN IF NOT EXISTS image_urls TEXT;
+              `
+            : `
+                ALTER TABLE products 
+                ADD COLUMN detailed_description TEXT,
+                ADD COLUMN image_urls TEXT;
+              `;
+
+        try {
+            if (isPostgres) {
+                await query(addColumnsSql);
+            } else {
+                // MySQL doesn't natively support ADD COLUMN IF NOT EXISTS easily in older versions, 
+                // but we can try-catch it to ignore Duplicate Column errors.
+                await query(addColumnsSql).catch(e => {
+                    if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+                });
+            }
+        } catch (colError) {
+            logger.warn('Failed to add new product columns (might already exist)', { colError });
+        }
+
     } catch (error) {
         logger.error('Error creating settings table', { error })
     }

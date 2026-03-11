@@ -116,7 +116,14 @@ export async function POST(request: NextRequest) {
       logger.error('Failed to create welcome notification', e)
     }
 
-    // ✅ Gửi Telegram thông báo user mới đăng ký
+    // ✅ Gửi Email Chào mừng (Welcome Email)
+    try {
+      const { sendWelcomeEmail } = await import('@/lib/email');
+      await sendWelcomeEmail(email, name);
+    } catch (e) {
+      const { logger } = await import('@/lib/logger');
+      logger.error('Failed to send welcome email', e);
+    }
     try {
       const { notifyNewUserRegistration } = await import('@/lib/server-notifications');
       notifyNewUserRegistration({

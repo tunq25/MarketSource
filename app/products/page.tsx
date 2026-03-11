@@ -15,6 +15,7 @@ import Image from "next/image"
 import { getLocalStorage, setLocalStorage } from "@/lib/localStorage-utils"
 import { logger } from "@/lib/logger-client"
 import { ProductSkeletonGrid } from "@/components/product-skeleton"
+import { useRouter } from "next/navigation"
 
 // Lazy load Three.js components để tối ưu performance
 const ThreeDFallback = dynamic(
@@ -46,19 +47,19 @@ const ThreeJSProductShowcase = dynamic(
   }
 )
 
-const MeteorShowerBackdrop = dynamic(
+const ThemeAwareBackground = dynamic(
   async () => {
     try {
-      const mod = await import("@/components/meteor-shower-3d")
-      return { default: mod.MeteorShower3D }
+      const mod = await import("@/components/theme-aware-background")
+      return { default: mod.ThemeAwareBackground }
     } catch (error) {
-      logger.error('Failed to load MeteorShower3D component', error)
+      logger.error('Failed to load ThemeAwareBackground component', error)
       throw error
     }
   },
   {
     ssr: false,
-    loading: () => <div className="absolute inset-0 bg-[#0B0C10]" />
+    loading: () => <div className="absolute inset-0 bg-blue-50 dark:bg-[#0B0C10]" />
   }
 )
 
@@ -83,13 +84,13 @@ function normalizeCategoryId(category: string | null | undefined): string {
 }
 
 export default function ProductsPage() {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [sortBy, setSortBy] = useState("price-low")
   const [priceRange, setPriceRange] = useState("all")
   const [products, setProducts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
 
   const [categories, setCategories] = useState(BASE_CATEGORIES)
 
@@ -278,9 +279,9 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 min-h-screen relative overflow-hidden">
-      {/* ✅ Hiệu ứng 3D Mưa sao băng theo yêu cầu */}
-      <MeteorShowerBackdrop />
+    <div className="bg-transparent min-h-screen relative overflow-hidden">
+      {/* Nền 3D tự đổi theo Theme */}
+      <ThemeAwareBackground />
 
       {/* Vẫn giữ một chút gradient mờ overlay để text bên trên dễ đọc */}
       <div className="absolute inset-0 pointer-events-none z-0">
@@ -304,8 +305,8 @@ export default function ProductsPage() {
         </div>
 
         {/* Filters */}
-        <div className="mb-8">
-          <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+        <div className="mb-8 relative z-10">
+          <Card className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl">
             <CardContent className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
@@ -393,9 +394,9 @@ export default function ProductsPage() {
             {sortedProducts.map((product, index) => (
               <Card
                 key={product.id}
-                className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-purple-500/50 transition-all duration-300 group overflow-hidden card-hover glass-card animate-fade-in-up cursor-pointer"
+                className="bg-white/60 dark:bg-black/40 backdrop-blur-xl border-white/60 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.05)] dark:shadow-2xl hover:border-purple-500/50 transition-all duration-300 group overflow-hidden augment-fade-in cursor-pointer"
                 style={{ animationDelay: `${index * 50}ms` }}
-                onClick={() => setSelectedProduct(product)}
+                onClick={() => router.push(`/product/${product.id}`)}
               >
                 <div className="relative overflow-hidden">
                   <Image
@@ -539,150 +540,6 @@ export default function ProductsPage() {
       </main>
 
       <Footer />
-
-      {/* ✅ Product Detail Modal */}
-      <AnimatePresence>
-        {selectedProduct && (
-          <motion.div
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => setSelectedProduct(null)}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            />
-            <motion.div
-              className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/20 bg-white shadow-2xl dark:bg-gray-900 dark:border-gray-700/50"
-              initial={{ opacity: 0, scale: 0.9, y: 30 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 30 }}
-              transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            >
-              <button
-                onClick={() => setSelectedProduct(null)}
-                className="absolute right-4 top-4 z-20 rounded-full bg-black/40 p-2 text-white backdrop-blur-sm transition hover:bg-black/60"
-              >
-                <X className="h-5 w-5" />
-              </button>
-
-              <div className="relative h-64 sm:h-72 w-full overflow-hidden rounded-t-3xl">
-                <Image
-                  src={selectedProduct.image || "/placeholder.svg"}
-                  alt={selectedProduct.title}
-                  fill
-                  className="object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                {selectedProduct.featured && (
-                  <Badge className="absolute left-5 top-5 bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-lg">
-                    🔥 Nổi bật
-                  </Badge>
-                )}
-                <div className="absolute bottom-5 left-5 right-5">
-                  <h2 className="text-2xl font-bold text-white drop-shadow-lg">
-                    {selectedProduct.title}
-                  </h2>
-                </div>
-              </div>
-
-              <div className="space-y-5 p-6">
-                <div className="flex flex-wrap gap-4">
-                  <div className="flex items-center gap-2 rounded-full bg-yellow-50 dark:bg-yellow-500/10 px-4 py-2">
-                    <Star className="h-4 w-4 text-yellow-500" />
-                    <span className="text-sm font-semibold text-yellow-700 dark:text-yellow-300">
-                      {(selectedProduct.rating || 0).toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-full bg-blue-50 dark:bg-blue-500/10 px-4 py-2">
-                    <Download className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                      {selectedProduct.downloads || 0} lượt tải
-                    </span>
-                  </div>
-                  {selectedProduct.category && (
-                    <div className="flex items-center gap-2 rounded-full bg-purple-50 dark:bg-purple-500/10 px-4 py-2">
-                      <Layers className="h-4 w-4 text-purple-500" />
-                      <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">
-                        {selectedProduct.category}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Mô tả</h4>
-                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                    {selectedProduct.description || "Chưa có mô tả chi tiết cho sản phẩm này."}
-                  </p>
-                </div>
-
-                {Array.isArray(selectedProduct.tags) && selectedProduct.tags.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1">
-                      <Tag className="h-3.5 w-3.5" /> Tags
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedProduct.tags.map((tag: string) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-purple-200/60 bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-200"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-500/10 dark:to-pink-500/10 p-5">
-                  <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Giá bán</p>
-                    <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {(selectedProduct.price || 0).toLocaleString("vi-VN")}đ
-                    </p>
-                    {selectedProduct.originalPrice > selectedProduct.price && (
-                      <p className="text-sm text-gray-500 line-through">
-                        {selectedProduct.originalPrice.toLocaleString("vi-VN")}đ
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-3">
-                    {selectedProduct.demoLink && (
-                      <Button
-                        variant="outline"
-                        className="border-gray-200 dark:border-gray-700"
-                        onClick={() => window.open(selectedProduct.demoLink, "_blank")}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Demo
-                      </Button>
-                    )}
-                    <Button
-                      onClick={() => { handleAddToCart(selectedProduct); setSelectedProduct(null); }}
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg shadow-purple-500/30"
-                    >
-                      <ShoppingCart className="mr-2 h-4 w-4" />
-                      Mua ngay
-                    </Button>
-                  </div>
-                </div>
-
-                {(selectedProduct.createdAt || selectedProduct.created_at) && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Đăng lúc: {new Date(selectedProduct.createdAt || selectedProduct.created_at).toLocaleDateString("vi-VN")}
-                  </p>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }

@@ -11,12 +11,16 @@ export function mapBackendToFrontend(backendProduct: any): any {
     id: backendProduct.id?.toString() || backendProduct.id,
     title: backendProduct.title,
     description: backendProduct.description,
+    detailedDescription: backendProduct.detailed_description,
     price: parseFloat(backendProduct.price || '0'),
     originalPrice: backendProduct.original_price ? parseFloat(backendProduct.original_price) : parseFloat(backendProduct.price || '0'),
     category: backendProduct.category,
     // Map image fields
     image: backendProduct.image_url || backendProduct.image || '/placeholder.svg',
     imageUrl: backendProduct.image_url,
+    imageUrls: Array.isArray(backendProduct.image_urls)
+      ? backendProduct.image_urls
+      : (typeof backendProduct.image_urls === 'string' ? JSON.parse(backendProduct.image_urls || '[]') : []),
     // Map download fields
     downloadLink: backendProduct.download_url || backendProduct.downloadUrl,
     downloadUrl: backendProduct.download_url,
@@ -47,10 +51,12 @@ export function mapFrontendToBackend(frontendProduct: any): any {
   return {
     title: frontendProduct.title,
     description: frontendProduct.description || null,
+    detailedDescription: frontendProduct.detailedDescription || null,
     price: parseFloat(frontendProduct.price || '0'),
     category: frontendProduct.category || null,
     // Map image fields
     imageUrl: frontendProduct.imageUrl || frontendProduct.image || null,
+    imageUrls: Array.isArray(frontendProduct.imageUrls) ? frontendProduct.imageUrls : [],
     // Map download fields
     downloadUrl: frontendProduct.downloadUrl || frontendProduct.downloadLink || null,
     // Map demo fields

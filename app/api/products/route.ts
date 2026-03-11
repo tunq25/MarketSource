@@ -101,8 +101,8 @@ export async function POST(request: NextRequest) {
     // ✅ FIX: Dùng MySQL syntax (? placeholder) thay vì PostgreSQL ($1,$2)
     const sql = `
       INSERT INTO products (
-        title, description, price, category, demo_url, download_url, image_url, tags, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        title, description, detailed_description, price, category, demo_url, download_url, image_url, image_urls, tags, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
 
     // ✅ FIX: tags phải là array cho PostgreSQL hoặc JSON string cho MySQL
@@ -111,14 +111,21 @@ export async function POST(request: NextRequest) {
       ? (Array.isArray(productData.tags) ? productData.tags : JSON.parse(productData.tags || '[]'))
       : (Array.isArray(productData.tags) ? JSON.stringify(productData.tags) : productData.tags || '[]');
 
+    // Đối với image_urls, cột được tạo dưới dạng TEXT cho cả 2 db nên ta luôn stringify
+    const imageUrlsValue = Array.isArray(productData.imageUrls)
+      ? JSON.stringify(productData.imageUrls)
+      : '[]';
+
     const res = await query(sql, [
       productData.title,
       productData.description || null,
+      productData.detailedDescription || null,
       productData.price,
       productData.category || null,
       productData.demoUrl || null,
       productData.downloadUrl || null,
       productData.imageUrl || null,
+      imageUrlsValue,
       tagsValue,
       productData.isActive !== false,
     ]);

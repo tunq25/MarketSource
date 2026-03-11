@@ -91,6 +91,18 @@ export async function notifyDepositRequest(payload: {
 <i>Vui lòng kiểm tra và duyệt yêu cầu!</i>`;
 
   await sendTelegramMessage(message);
+
+  const adminWhatsapp = process.env.ADMIN_WHATSAPP || '';
+  if (adminWhatsapp) {
+    try {
+      await sendWhatsAppMessage({
+        to: adminWhatsapp,
+        body: message.replace(/<[^>]*>/g, '').replace(/💳 YÊU CẦU NẠP TIỀN MỚI/, '💳 *YÊU CẦU NẠP TIỀN MỚI*'),
+      });
+    } catch (error) {
+      logger.error('WhatsApp notification failed', error);
+    }
+  }
 }
 
 export async function notifyWithdrawalRequest(payload: {
@@ -117,6 +129,18 @@ export async function notifyWithdrawalRequest(payload: {
 <i>Vui lòng kiểm tra và xử lý!</i>`;
 
   await sendTelegramMessage(message);
+
+  const adminWhatsapp = process.env.ADMIN_WHATSAPP || '';
+  if (adminWhatsapp) {
+    try {
+      await sendWhatsAppMessage({
+        to: adminWhatsapp,
+        body: message.replace(/<[^>]*>/g, '').replace(/💸 YÊU CẦU RÚT TIỀN MỚI/, '💸 *YÊU CẦU RÚT TIỀN MỚI*'),
+      });
+    } catch (error) {
+      logger.error('WhatsApp notification failed', error);
+    }
+  }
 }
 
 export async function notifyPasswordReset(payload: {

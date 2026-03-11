@@ -1540,6 +1540,8 @@ export async function updateProduct(
     demoUrl?: string;
     downloadUrl?: string;
     imageUrl?: string;
+    imageUrls?: string[] | null;
+    detailedDescription?: string | null;
     tags?: string[];
     isActive?: boolean;
     averageRating?: number; // Manual override
@@ -1590,6 +1592,18 @@ export async function updateProduct(
     if (productData.imageUrl !== undefined) {
       updates.push(`image_url = $${paramIndex}`);
       params.push(productData.imageUrl || null);
+      paramIndex++;
+    }
+
+    if (productData.detailedDescription !== undefined) {
+      updates.push(`detailed_description = $${paramIndex}`);
+      params.push(productData.detailedDescription || null);
+      paramIndex++;
+    }
+
+    if (productData.imageUrls !== undefined) {
+      updates.push(`image_urls = $${paramIndex}`);
+      params.push(productData.imageUrls ? JSON.stringify(productData.imageUrls) : '[]');
       paramIndex++;
     }
 

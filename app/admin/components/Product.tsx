@@ -29,7 +29,9 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
     image: "",
     downloadLink: "",
     demoLink: "",
-    tags: ""
+    tags: "",
+    detailedDescription: "",
+    imageUrls: ""
   })
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -54,7 +56,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
         setIsLoading(false);
       }
     };
-    
+
     loadProducts();
   }, [setProducts]);
 
@@ -74,8 +76,10 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
         price: parseFloat(newProduct.price),
         tags: newProduct.tags ? newProduct.tags.split(",").map(tag => tag.trim()).filter(Boolean) : [],
         imageUrl: newProduct.image,
+        imageUrls: newProduct.imageUrls ? newProduct.imageUrls.split(",").map(url => url.trim()).filter(Boolean) : [],
         downloadUrl: newProduct.downloadLink,
         demoUrl: newProduct.demoLink,
+        detailedDescription: newProduct.detailedDescription || null,
       });
 
       // Gọi API
@@ -96,7 +100,9 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
           image: "",
           downloadLink: "",
           demoLink: "",
-          tags: ""
+          tags: "",
+          detailedDescription: "",
+          imageUrls: ""
         });
 
         alert("Thêm sản phẩm thành công!")
@@ -132,8 +138,12 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
         price: parseFloat(product.price),
         tags: Array.isArray(product.tags) ? product.tags : (product.tags ? product.tags.split(",").map((tag: string) => tag.trim()).filter(Boolean) : []),
         imageUrl: product.imageUrl || product.image,
+        imageUrls: typeof product.imageUrls === 'string'
+          ? product.imageUrls.split(",").map((url: string) => url.trim()).filter(Boolean)
+          : (Array.isArray(product.imageUrls) ? product.imageUrls : []),
         downloadUrl: product.downloadUrl || product.downloadLink,
         demoUrl: product.demoUrl || product.demoLink,
+        detailedDescription: product.detailedDescription || null,
         // Admin có thể sửa ratings và download_count
         averageRating: product.rating !== undefined ? parseFloat(product.rating) : undefined,
         downloadCount: product.downloadCount !== undefined ? parseInt(product.downloadCount) : undefined,
@@ -209,7 +219,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
               <Input
                 id="title"
                 value={newProduct.title}
-                onChange={(e) => setNewProduct({...newProduct, title: e.target.value})}
+                onChange={(e) => setNewProduct({ ...newProduct, title: e.target.value })}
                 placeholder="Nhập tên sản phẩm"
               />
             </div>
@@ -218,9 +228,19 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
               <Textarea
                 id="description"
                 value={newProduct.description}
-                onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
-                placeholder="Mô tả sản phẩm"
+                onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                placeholder="Mô tả sản phẩm ngắn gọn"
                 rows={3}
+              />
+            </div>
+            <div>
+              <Label htmlFor="detailedDescription">Bài viết giới thiệu chi tiết (HTML/MD)</Label>
+              <Textarea
+                id="detailedDescription"
+                value={newProduct.detailedDescription}
+                onChange={(e) => setNewProduct({ ...newProduct, detailedDescription: e.target.value })}
+                placeholder="Bài viết dài cấp độ Landing Page..."
+                rows={10}
               />
             </div>
             <div>
@@ -229,13 +249,13 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                 id="price"
                 type="number"
                 value={newProduct.price}
-                onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
                 placeholder="0"
               />
             </div>
             <div>
               <Label htmlFor="category">Danh mục</Label>
-              <Select value={newProduct.category} onValueChange={(value) => setNewProduct({...newProduct, category: value})}>
+              <Select value={newProduct.category} onValueChange={(value) => setNewProduct({ ...newProduct, category: value })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn danh mục" />
                 </SelectTrigger>
@@ -253,8 +273,18 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
               <Input
                 id="image"
                 value={newProduct.image}
-                onChange={(e) => setNewProduct({...newProduct, image: e.target.value})}
+                onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
                 placeholder="https://example.com/image.jpg"
+              />
+            </div>
+            <div>
+              <Label htmlFor="imageUrls">Thư viện ảnh phụ (phân cách bằng dấu phẩy)</Label>
+              <Textarea
+                id="imageUrls"
+                value={newProduct.imageUrls}
+                onChange={(e) => setNewProduct({ ...newProduct, imageUrls: e.target.value })}
+                placeholder="https://img1.jpg, https://img2.jpg"
+                rows={3}
               />
             </div>
             <div>
@@ -262,7 +292,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
               <Input
                 id="downloadLink"
                 value={newProduct.downloadLink}
-                onChange={(e) => setNewProduct({...newProduct, downloadLink: e.target.value})}
+                onChange={(e) => setNewProduct({ ...newProduct, downloadLink: e.target.value })}
                 placeholder="https://example.com/download"
               />
             </div>
@@ -271,7 +301,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
               <Input
                 id="demoLink"
                 value={newProduct.demoLink}
-                onChange={(e) => setNewProduct({...newProduct, demoLink: e.target.value})}
+                onChange={(e) => setNewProduct({ ...newProduct, demoLink: e.target.value })}
                 placeholder="https://example.com/demo"
               />
             </div>
@@ -280,7 +310,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
               <Input
                 id="tags"
                 value={newProduct.tags}
-                onChange={(e) => setNewProduct({...newProduct, tags: e.target.value})}
+                onChange={(e) => setNewProduct({ ...newProduct, tags: e.target.value })}
                 placeholder="react, nextjs, typescript"
               />
             </div>
@@ -302,7 +332,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                 <Input
                   id="edit-title"
                   value={editingProduct.title}
-                  onChange={(e) => setEditingProduct({...editingProduct, title: e.target.value})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, title: e.target.value })}
                   placeholder="Nhập tên sản phẩm"
                 />
               </div>
@@ -311,9 +341,19 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                 <Textarea
                   id="edit-description"
                   value={editingProduct.description}
-                  onChange={(e) => setEditingProduct({...editingProduct, description: e.target.value})}
-                  placeholder="Mô tả sản phẩm"
+                  onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                  placeholder="Mô tả sản phẩm ngắn gọn"
                   rows={3}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-detailedDescription">Bài viết giới thiệu chi tiết (HTML/MD)</Label>
+                <Textarea
+                  id="edit-detailedDescription"
+                  value={editingProduct.detailedDescription || ""}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, detailedDescription: e.target.value })}
+                  placeholder="Bài viết dài cấp độ Landing Page..."
+                  rows={10}
                 />
               </div>
               <div>
@@ -322,13 +362,13 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                   id="edit-price"
                   type="number"
                   value={editingProduct.price}
-                  onChange={(e) => setEditingProduct({...editingProduct, price: e.target.value})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, price: e.target.value })}
                   placeholder="0"
                 />
               </div>
               <div>
                 <Label htmlFor="edit-category">Danh mục</Label>
-                <Select value={editingProduct.category} onValueChange={(value) => setEditingProduct({...editingProduct, category: value})}>
+                <Select value={editingProduct.category} onValueChange={(value) => setEditingProduct({ ...editingProduct, category: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Chọn danh mục" />
                   </SelectTrigger>
@@ -346,8 +386,18 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                 <Input
                   id="edit-image"
                   value={editingProduct.image}
-                  onChange={(e) => setEditingProduct({...editingProduct, image: e.target.value})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
                   placeholder="https://example.com/image.jpg"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-imageUrls">Thư viện ảnh phụ (phân cách bằng dấu phẩy)</Label>
+                <Textarea
+                  id="edit-imageUrls"
+                  value={(Array.isArray(editingProduct.imageUrls) ? editingProduct.imageUrls.join(", ") : editingProduct.imageUrls) || ""}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, imageUrls: e.target.value })}
+                  placeholder="https://img1.jpg, https://img2.jpg"
+                  rows={3}
                 />
               </div>
               <div>
@@ -355,7 +405,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                 <Input
                   id="edit-downloadLink"
                   value={editingProduct.downloadLink}
-                  onChange={(e) => setEditingProduct({...editingProduct, downloadLink: e.target.value})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, downloadLink: e.target.value })}
                   placeholder="https://example.com/download"
                 />
               </div>
@@ -364,7 +414,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                 <Input
                   id="edit-demoLink"
                   value={editingProduct.demoLink}
-                  onChange={(e) => setEditingProduct({...editingProduct, demoLink: e.target.value})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, demoLink: e.target.value })}
                   placeholder="https://example.com/demo"
                 />
               </div>
@@ -373,11 +423,11 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                 <Input
                   id="edit-tags"
                   value={editingProduct.tags?.join(", ") || ""}
-                  onChange={(e) => setEditingProduct({...editingProduct, tags: e.target.value.split(",").map(tag => tag.trim())})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, tags: e.target.value.split(",").map(tag => tag.trim()) })}
                   placeholder="react, nextjs, typescript"
                 />
               </div>
-              
+
               {/* Rating - Admin có thể manually set */}
               <div>
                 <Label htmlFor="edit-rating">Đánh giá (0-5 sao) - Admin override</Label>
@@ -388,7 +438,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                   max="5"
                   step="0.1"
                   value={editingProduct.rating || editingProduct.averageRating || 0}
-                  onChange={(e) => setEditingProduct({...editingProduct, rating: parseFloat(e.target.value)})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, rating: parseFloat(e.target.value) })}
                   placeholder="0"
                 />
                 <p className="text-xs text-gray-500 mt-1">Admin có thể manually set rating (sẽ override tự động tính từ reviews)</p>
@@ -402,7 +452,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                   type="number"
                   min="0"
                   value={editingProduct.downloadCount || editingProduct.downloads || 0}
-                  onChange={(e) => setEditingProduct({...editingProduct, downloadCount: parseInt(e.target.value)})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, downloadCount: parseInt(e.target.value) })}
                   placeholder="0"
                 />
                 <p className="text-xs text-gray-500 mt-1">Admin có thể manually set download count (sẽ override tự động tính từ downloads)</p>
@@ -414,7 +464,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                   type="checkbox"
                   id="edit-isFeatured"
                   checked={editingProduct.isFeatured || false}
-                  onChange={(e) => setEditingProduct({...editingProduct, isFeatured: e.target.checked})}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, isFeatured: e.target.checked })}
                   className="h-4 w-4 rounded border-gray-300"
                 />
                 <Label htmlFor="edit-isFeatured" className="cursor-pointer">
@@ -505,7 +555,7 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        setEditingProduct({...product})
+                        setEditingProduct({ ...product })
                         setShowEditModal(true)
                       }}
                     >

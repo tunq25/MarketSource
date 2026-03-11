@@ -60,29 +60,31 @@ export const withdrawalSchema = z.object({
 })
 
 // Product schemas
-// ✅ FIX: Nới lỏng validation — coerce price, chấp nhận URL bất kỳ hoặc rỗng/null
 export const productSchema = z.object({
   title: z.string().min(1, 'Tiêu đề không được để trống').max(255),
   description: z.string().optional().nullable(),
+  detailedDescription: z.string().optional().nullable(),
   price: z.coerce.number().min(0, 'Giá không được âm'),
   category: z.string().optional().nullable(),
   demoUrl: z.string().optional().nullable(),
   downloadUrl: z.string().optional().nullable(),
   tags: z.array(z.string()).optional().nullable(),
   imageUrl: z.string().optional().nullable(),
+  imageUrls: z.array(z.string()).optional().nullable(),
   isActive: z.boolean().optional(),
 })
 
-// Update product schema (admin có thể sửa ratings và download_count)
 export const updateProductSchema = z.object({
   title: z.string().min(1, 'Tiêu đề không được để trống').max(255).optional(),
   description: z.string().optional().nullable(),
+  detailedDescription: z.string().optional().nullable(),
   price: z.coerce.number().min(0, 'Giá không được âm').optional(),
   category: z.string().optional().nullable(),
   demoUrl: z.string().optional().nullable(),
   downloadUrl: z.string().optional().nullable(),
   tags: z.array(z.string()).optional().nullable(),
   imageUrl: z.string().optional().nullable(),
+  imageUrls: z.array(z.string()).optional().nullable(),
   isActive: z.boolean().optional(),
   averageRating: z.coerce.number().min(0).max(5).optional(),
   downloadCount: z.coerce.number().int().min(0).optional(),

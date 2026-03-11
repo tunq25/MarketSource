@@ -1150,6 +1150,8 @@ export async function updateProductMySQL(
     demoUrl?: string
     downloadUrl?: string
     imageUrl?: string
+    imageUrls?: string[] | null
+    detailedDescription?: string | null
     tags?: string[] | null
     isActive?: boolean
     averageRating?: number
@@ -1187,6 +1189,14 @@ export async function updateProductMySQL(
     if (productData.imageUrl !== undefined) {
       updates.push("image_url = ?")
       params.push(productData.imageUrl || null)
+    }
+    if (productData.detailedDescription !== undefined) {
+      updates.push("detailed_description = ?")
+      params.push(productData.detailedDescription || null)
+    }
+    if (productData.imageUrls !== undefined) {
+      updates.push("image_urls = ?")
+      params.push(productData.imageUrls ? JSON.stringify(productData.imageUrls) : '[]')
     }
     if (productData.tags !== undefined) {
       // ✅ FIX: Chỉ stringify tags nếu xài MySQL. Nếu là PostgreSQL (Dùng mảng native TEXT[]), truyền thẳng Array
