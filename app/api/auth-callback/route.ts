@@ -3,7 +3,7 @@ import { getClientIP } from '@/lib/api-auth';
 import { createOrUpdateUser } from '@/lib/database-mysql';
 import { logger } from '@/lib/logger';
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/next-auth";
 
 export const runtime = 'nodejs'
 
