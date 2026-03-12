@@ -276,7 +276,7 @@ export async function voteReview(reviewId: number, userId: number, isHelpful: bo
       [reviewId, userId, isHelpful]
     )
 
-    // Update helpful_count
+    // ✅ BUG #11 FIX: Truyền đủ 2 parameters cho UPDATE query
     await mysqlQuery(
       `UPDATE reviews 
        SET helpful_count = (
@@ -284,7 +284,7 @@ export async function voteReview(reviewId: number, userId: number, isHelpful: bo
          WHERE review_id = ? AND is_helpful = 1
        )
        WHERE id = ?`,
-      [reviewId]
+      [reviewId, reviewId]
     )
 
     const rows = await mysqlQuery<any>('SELECT id FROM review_votes WHERE review_id = ? AND user_id = ?', [reviewId, userId])

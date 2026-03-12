@@ -146,32 +146,17 @@ function CheckoutContent() {
       // Đảm bảo purchase thành công mới trừ tiền
       // Balance đã được trừ trong createPurchase() function (transaction-safe)
       const purchaseResults = [];
+      // ✅ BUG #9+#12 FIX: Dùng apiPost thay vì raw fetch + localStorage token
+      const { apiPost } = await import('@/lib/api-client');
       try {
         for (const item of cartItems) {
-          // ✅ FIX: Thêm Authorization header nếu có token
-          const headers: HeadersInit = { 'Content-Type': 'application/json' };
-          const token = getLocalStorage<string | null>('firebaseToken', null) || getLocalStorage<string | null>('authToken', null);
-          if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-          }
-          
-          const response = await fetch('/api/purchases', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-              userId: currentUser.uid || currentUser.id,
-              productId: item.id,
-              amount: item.price * item.quantity,
-              userEmail: currentUser.email
-            })
+          const result = await apiPost('/api/purchases', {
+            userId: currentUser.uid || currentUser.id,
+            productId: item.id,
+            amount: item.price * item.quantity,
+            userEmail: currentUser.email
           });
           
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            throw new Error(errorData.error || `Purchase failed: ${response.status}`);
-          }
-          
-          const result = await response.json();
           if (!result.success) {
             throw new Error(result.error || 'Purchase failed');
           }

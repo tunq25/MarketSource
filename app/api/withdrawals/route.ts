@@ -206,7 +206,7 @@ export async function PUT(request: NextRequest): Promise<Response> {
 
     const updateData = validation.data;
 
-    // ✅ FIX: Kiểm tra withdrawal tồn tại và chưa approved
+    // ✅ BUG #1 FIX: Phân nhánh approve/reject đúng cách
     if (updateData.status === 'approved') {
       const withdrawal = await queryOne<any>(
         'SELECT id, user_id, amount, status FROM withdrawals WHERE id = ?',
@@ -226,19 +226,54 @@ export async function PUT(request: NextRequest): Promise<Response> {
           error: 'Withdrawal đã được duyệt trước đó'
         }, { status: 400 });
       }
+
+      // ✅ CRITICAL FIX: Gọi hàm trừ balance thay vì chỉ đổi status
+      const { approveWithdrawalAndUpdateBalanceMySQL } = await import('@/lib/database-mysql');
+      const result = await approveWithdrawalAndUpdateBalanceMySQL(
+        Number(updateData.withdrawalId),
+        Number(withdrawal.user_id),
+        Number(withdrawal.amount),
+        updateData.approvedBy || 'admin'
+      );
+
+      logger.info('Withdrawal approved and balance deducted', {
+        withdrawalId: updateData.withdrawalId,
+        userId: withdrawal.user_id,
+        amount: withdrawal.amount,
+        newBalance: result.newBalance,
+      });
+
+      // Tạo notification cho user
+      try {
+        const { createNotification } = await import('@/lib/database-mysql');
+        await createNotification({
+          userId: Number(withdrawal.user_id),
+          type: 'withdrawal_approved',
+          message: `Yêu cầu rút ${Number(withdrawal.amount).toLocaleString('vi-VN')}đ đã được duyệt. Số dư: ${result.newBalance.toLocaleString('vi-VN')}đ`,
+          isRead: false,
+        });
+      } catch (notifErr) {
+        logger.warn('Failed to create withdrawal notification', { error: notifErr });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Withdrawal approved and balance updated',
+        newBalance: result.newBalance,
+      });
+    } else {
+      // Reject hoặc pending → chỉ đổi status
+      await updateWithdrawalStatus(
+        Number(updateData.withdrawalId),
+        updateData.status,
+        updateData.approvedBy
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: 'Withdrawal status updated'
+      });
     }
-
-    // Update withdrawal status
-    await updateWithdrawalStatus(
-      Number(updateData.withdrawalId),
-      updateData.status,
-      updateData.approvedBy
-    );
-
-    return NextResponse.json({
-      success: true,
-      message: 'Withdrawal status updated'
-    });
   } catch (error: any) {
     logger.error('Withdrawal PUT error', error as Error, { endpoint: '/api/withdrawals' });
 

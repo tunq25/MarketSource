@@ -47,35 +47,42 @@ export async function verifyFirebaseToken(
     const userEmail = request.headers.get('X-User-Email');
     const emailAuthSecret = request.headers.get('X-Email-Auth-Secret');
 
-    // ✅ SECURITY FIX: Chỉ cho phép email-based auth với flag riêng VÀ secret
-    // Không dựa vào NODE_ENV để tránh misconfiguration
+    // ✅ SECURITY FIX: Email-based auth cho phép cả dev và production
+    // Development: chỉ cần ALLOW_EMAIL_AUTH=true (bypass secret/IP)
+    // Production: BẮT BUỘC có secret match
     const ALLOW_EMAIL_AUTH = process.env.ALLOW_EMAIL_AUTH === 'true';
     const EMAIL_AUTH_SECRET = process.env.EMAIL_AUTH_SECRET;
     const IS_DEVELOPMENT = process.env.NODE_ENV === 'development';
 
-    // ✅ SECURITY FIX: Email-based auth chỉ hoạt động khi:
-    // 1. Flag ALLOW_EMAIL_AUTH = 'true'
-    // 2. Đang ở development mode (BẮT BUỘC)
-    // 3. Có secret key match (nếu được set)
-    // 4. IP trong whitelist (nếu được set)
-    const EMAIL_AUTH_IP_WHITELIST = process.env.EMAIL_AUTH_IP_WHITELIST?.split(',').map(ip => ip.trim()) || [];
+    const EMAIL_AUTH_IP_WHITELIST_RAW = process.env.EMAIL_AUTH_IP_WHITELIST?.trim() || '';
+    const EMAIL_AUTH_IP_WHITELIST = EMAIL_AUTH_IP_WHITELIST_RAW ? EMAIL_AUTH_IP_WHITELIST_RAW.split(',').map(ip => ip.trim()).filter(Boolean) : [];
     const clientIP = getClientIP(request);
 
-    // ✅ FIX: Tự động cho phép localhost trong môi trường development
+    // IP check: dev localhost = always OK, whitelist trống = allow all
     const isLocalhost = clientIP === '127.0.0.1' || clientIP === '::1' || clientIP === '::ffff:127.0.0.1';
     const isIPAllowed = (IS_DEVELOPMENT && isLocalhost) || EMAIL_AUTH_IP_WHITELIST.length === 0 || EMAIL_AUTH_IP_WHITELIST.includes(clientIP);
 
-    const canUseEmailAuth = ALLOW_EMAIL_AUTH && IS_DEVELOPMENT &&
-      (!EMAIL_AUTH_SECRET || emailAuthSecret === EMAIL_AUTH_SECRET) &&
-      isIPAllowed;
+    // Development: cho phép nếu ALLOW_EMAIL_AUTH=true (bypass secret)
+    // Production: bắt buộc secret match
+    let canUseEmailAuth = false;
+    if (ALLOW_EMAIL_AUTH) {
+      if (IS_DEVELOPMENT) {
+        // Dev mode: chỉ cần flag, không cần secret/IP
+        canUseEmailAuth = true;
+      } else {
+        // Production: bắt buộc secret match + IP check
+        const isSecretValid = !!EMAIL_AUTH_SECRET && emailAuthSecret === EMAIL_AUTH_SECRET;
+        canUseEmailAuth = isSecretValid && isIPAllowed;
+      }
+    }
 
-    // ✅ SECURITY: Log email auth attempts
+    // ✅ SECURITY: Log email auth attempts bị block
     if (userEmail && !canUseEmailAuth) {
       const { logger } = await import('@/lib/logger');
       logger.warn('Email auth attempt blocked', {
         userEmail,
         ip: clientIP,
-        reason: !IS_DEVELOPMENT ? 'production_mode' : !ALLOW_EMAIL_AUTH ? 'flag_disabled' : !isIPAllowed ? 'ip_not_whitelisted' : 'secret_mismatch'
+        reason: !ALLOW_EMAIL_AUTH ? 'flag_disabled' : IS_DEVELOPMENT ? 'dev_unknown' : (!emailAuthSecret ? 'no_secret_header' : 'secret_mismatch')
       });
     }
 
@@ -150,13 +157,14 @@ export async function verifyFirebaseToken(
       const EMAIL_AUTH_SECRET = process.env.EMAIL_AUTH_SECRET;
       const emailAuthSecret = request.headers.get('X-Email-Auth-Secret');
 
-      const EMAIL_AUTH_IP_WHITELIST = process.env.EMAIL_AUTH_IP_WHITELIST?.split(',').map(ip => ip.trim()) || [];
-      const clientIP = getClientIP(request);
-      const isIPAllowed = EMAIL_AUTH_IP_WHITELIST.length === 0 || EMAIL_AUTH_IP_WHITELIST.includes(clientIP);
-
-      const canUseEmailAuth = ALLOW_EMAIL_AUTH && IS_DEVELOPMENT &&
-        (!EMAIL_AUTH_SECRET || emailAuthSecret === EMAIL_AUTH_SECRET) &&
-        isIPAllowed;
+      let canUseEmailAuth = false;
+      if (ALLOW_EMAIL_AUTH) {
+        if (IS_DEVELOPMENT) {
+          canUseEmailAuth = true;
+        } else {
+          canUseEmailAuth = !!EMAIL_AUTH_SECRET && emailAuthSecret === EMAIL_AUTH_SECRET;
+        }
+      }
 
       if (canUseEmailAuth && userEmail) {
         // ✅ Rate limiting
@@ -209,13 +217,14 @@ export async function verifyFirebaseToken(
     const EMAIL_AUTH_SECRET = process.env.EMAIL_AUTH_SECRET;
     const emailAuthSecret = request.headers.get('X-Email-Auth-Secret');
 
-    const EMAIL_AUTH_IP_WHITELIST = process.env.EMAIL_AUTH_IP_WHITELIST?.split(',').map(ip => ip.trim()) || [];
-    const clientIP = getClientIP(request);
-    const isIPAllowed = EMAIL_AUTH_IP_WHITELIST.length === 0 || EMAIL_AUTH_IP_WHITELIST.includes(clientIP);
-
-    const canUseEmailAuth = ALLOW_EMAIL_AUTH && IS_DEVELOPMENT &&
-      (!EMAIL_AUTH_SECRET || emailAuthSecret === EMAIL_AUTH_SECRET) &&
-      isIPAllowed;
+    let canUseEmailAuth = false;
+    if (ALLOW_EMAIL_AUTH) {
+      if (IS_DEVELOPMENT) {
+        canUseEmailAuth = true;
+      } else {
+        canUseEmailAuth = !!EMAIL_AUTH_SECRET && emailAuthSecret === EMAIL_AUTH_SECRET;
+      }
+    }
 
     if (canUseEmailAuth) {
       try {

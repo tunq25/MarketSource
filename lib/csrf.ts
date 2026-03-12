@@ -6,7 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes, createHash } from 'crypto';
 
-const CSRF_SECRET = process.env.CSRF_SECRET || 'change-this-in-production';
+// ✅ BUG #7 FIX: Không dùng hardcoded secret trong production
+const CSRF_SECRET = process.env.CSRF_SECRET || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('CSRF_SECRET env variable is required in production!') })() : 'dev-csrf-secret-only');
 
 /**
  * Generate CSRF token

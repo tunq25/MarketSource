@@ -3,7 +3,7 @@
 import { logger } from "@/lib/logger-client"
 import type { UserSyncResult } from "@/lib/userManager"
 
-import { useState, useEffect, useRef, useCallback, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,7 +16,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { signIn, useSession } from "next-auth/react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { getLocalStorage } from "@/lib/localStorage-utils"
-import HCaptcha from "@hcaptcha/react-hcaptcha"
+import PowCaptcha from "@/components/PowCaptcha"
 
 // Social login icons
 const GoogleIcon = () => (
@@ -50,17 +50,6 @@ function RegisterPageContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
-  const captchaRef = useRef<HCaptcha>(null)
-
-  const hcaptchaSiteKey = process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY || '10000000-ffff-ffff-ffff-000000000001'
-
-  const onCaptchaVerify = useCallback((token: string) => {
-    setCaptchaToken(token)
-  }, [])
-
-  const onCaptchaExpire = useCallback(() => {
-    setCaptchaToken(null)
-  }, [])
 
   const logSyncStatus = (
     user: { uid?: string; email?: string; provider?: string },
@@ -274,7 +263,6 @@ function RegisterPageContent() {
 
     } catch (error: any) {
       setError(error.message)
-      captchaRef.current?.resetCaptcha()
       setCaptchaToken(null)
     } finally {
       setIsLoading(false)
@@ -407,14 +395,9 @@ function RegisterPageContent() {
               </Label>
             </div>
 
-            {/* hCaptcha Widget */}
+            {/* PoW Captcha Widget */}
             <div className="flex justify-center">
-              <HCaptcha
-                ref={captchaRef}
-                sitekey={hcaptchaSiteKey}
-                onVerify={onCaptchaVerify}
-                onExpire={onCaptchaExpire}
-              />
+              <PowCaptcha onVerify={(token) => setCaptchaToken(token)} />
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading || !acceptTerms || !captchaToken}>

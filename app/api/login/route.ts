@@ -19,17 +19,14 @@ export async function POST(request: NextRequest) {
     let { email, password, captchaToken } = body;
     email = email?.trim().toLowerCase();
 
-    // ✅ hCaptcha verification (Bypass in development)
-    const isDev = process.env.NODE_ENV === 'development';
-    if (!isDev) {
-      const { verifyHCaptcha } = await import('@/lib/hcaptcha');
-      const captchaResult = await verifyHCaptcha(captchaToken || '');
-      if (!captchaResult.success) {
-        return NextResponse.json(
-          { success: false, error: 'Xác minh captcha thất bại. Vui lòng thử lại.' },
-          { status: 400 }
-        );
-      }
+    // ✅ PoW Captcha verification
+    const { verifyPoWCaptcha } = await import('@/lib/pow-captcha');
+    const captchaResult = verifyPoWCaptcha(captchaToken || '');
+    if (!captchaResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Xác minh captcha thất bại. Vui lòng thử lại.' },
+        { status: 400 }
+      );
     }
 
     if (!email || !password) {

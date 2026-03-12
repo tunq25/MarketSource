@@ -208,12 +208,13 @@ export async function changePassword(
       }
     }
 
-    // Update password
+    // ✅ BUG #3 FIX: Gửi đầy đủ payload bao gồm currentPassword
     const updateResponse = await fetch('/api/change-password-fallback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
+        currentPassword: currentPwd,
         newPassword,
       }),
     });

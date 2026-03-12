@@ -32,9 +32,9 @@ export async function POST(request: NextRequest) {
     username = body.username;
     const captchaToken = body.captchaToken;
 
-    // ✅ hCaptcha verification
-    const { verifyHCaptcha } = await import('@/lib/hcaptcha');
-    const captchaResult = await verifyHCaptcha(captchaToken || '');
+    // ✅ PoW Captcha verification
+    const { verifyPoWCaptcha } = await import('@/lib/pow-captcha');
+    const captchaResult = verifyPoWCaptcha(captchaToken || '');
     if (!captchaResult.success) {
       return NextResponse.json(
         { success: false, error: 'Xác minh captcha thất bại. Vui lòng thử lại.' },

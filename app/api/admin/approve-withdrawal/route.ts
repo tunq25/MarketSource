@@ -7,7 +7,7 @@ import {
   getUserIdByEmail,
 } from "@/lib/database-mysql"
 import { requireAdmin, validateRequest } from "@/lib/api-auth"
-import { userManager } from "@/lib/userManager"
+// ✅ FIX: Removed static import of client-only userManager (uses localStorage)
 
 export const runtime = "nodejs"
 
@@ -129,17 +129,12 @@ export async function POST(request: NextRequest) {
         adminEmail
       );
 
-      // Sync với userManager (Firestore/localStorage)
-      try {
-        const stringUserId = String(userId);
-        const userData = await userManager.getUserData(stringUserId);
-        if (userData) {
-          await userManager.updateBalance(stringUserId, result.newBalance);
-        }
-      } catch (syncError) {
-        const { logger } = await import('@/lib/logger');
-        logger.warn('userManager sync failed (non-critical)', { error: syncError, userId });
-      }
+      // ✅ FIX: userManager is client-side only — balance already updated in DB
+      // Client-side sync happens automatically via userUpdated event
+      const { logger } = await import('@/lib/logger');
+      logger.info('Withdrawal approved, balance updated in DB', { 
+        withdrawalId, userId, newBalance: result.newBalance 
+      });
 
       // ✅ FIX: Tạo notification cho user khi withdrawal được approve
       try {

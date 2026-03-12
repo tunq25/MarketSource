@@ -75,6 +75,10 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
+    // ✅ BUG #5 FIX: Rate limiting cho deposit POST
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 5, 60, 'deposits-post');
+    if (rateLimitResponse) return rateLimitResponse;
+
     // Require authentication
     const authUser = await verifyFirebaseToken(request);
     if (!authUser) {

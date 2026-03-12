@@ -72,6 +72,9 @@ async function ensureSettingsTable() {
 // Lấy tất cả cài đặt
 export async function GET(request: NextRequest) {
     try {
+        // ✅ BUG #2 FIX: Yêu cầu quyền admin cho GET settings
+        await requireAdmin(request);
+
         const rateLimitResponse = await checkRateLimitAndRespond(request, 100, 60, 'get-settings')
         if (rateLimitResponse) return rateLimitResponse
 
@@ -119,13 +122,23 @@ export async function PUT(request: NextRequest) {
             if (typeof key === 'string' && value !== undefined) {
                 const valStr = typeof value === 'string' ? value : JSON.stringify(value)
 
-                // MySQL Upsert (INSERT ... ON DUPLICATE KEY UPDATE)
-                await query(
-                    `INSERT INTO settings (\`key\`, value) 
-                     VALUES (?, ?) 
-                     ON DUPLICATE KEY UPDATE value = ?`,
-                    [key, valStr, valStr]
-                )
+                // ✅ BUG #8 FIX: Dùng đúng syntax cho từng database engine
+                const isPostgres = process.env.DATABASE_URL || !process.env.MYSQL_HOST;
+                if (isPostgres) {
+                    await query(
+                        `INSERT INTO settings ("key", value) 
+                         VALUES (?, ?) 
+                         ON CONFLICT ("key") DO UPDATE SET value = EXCLUDED.value`,
+                        [key, valStr]
+                    )
+                } else {
+                    await query(
+                        `INSERT INTO settings (\`key\`, value) 
+                         VALUES (?, ?) 
+                         ON DUPLICATE KEY UPDATE value = ?`,
+                        [key, valStr, valStr]
+                    )
+                }
             }
         }
 

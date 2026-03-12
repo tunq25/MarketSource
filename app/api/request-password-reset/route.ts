@@ -14,6 +14,11 @@ export const runtime = 'nodejs'
  */
 export async function POST(request: NextRequest) {
   try {
+    // ✅ BUG #4 FIX: Rate limiting để tránh spam OTP email
+    const { checkRateLimitAndRespond } = await import('@/lib/rate-limit');
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 3, 300, 'password-reset');
+    if (rateLimitResponse) return rateLimitResponse;
+
     let { email, deviceInfo, ipAddress: providedIp } = await request.json();
     email = email?.trim().toLowerCase();
 

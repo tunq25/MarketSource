@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from '@/lib/firebase';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs'
@@ -21,26 +19,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: error.message || 'Unauthorized' }, { status: 401 });
     }
 
-    if (!isFirebaseConfigured() || !db) {
-      return NextResponse.json({ success: false, error: 'Firebase not configured' }, { status: 500 });
+    // ✅ FIX: Use Firebase Admin SDK instead of client-side Firestore
+    let firestoreUser: any = null;
+    try {
+      const { getApps, initializeApp, cert } = await import('firebase-admin/app');
+      const { getFirestore } = await import('firebase-admin/firestore');
+      
+      if (getApps().length === 0) {
+        initializeApp({
+          credential: cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+          }),
+        });
+      }
+      
+      const adminDb = getFirestore();
+      const userDoc = await adminDb.collection('users').doc(uid).get();
+      
+      if (!userDoc.exists) {
+        return NextResponse.json({ success: false, error: 'User not found in Firestore' }, { status: 404 });
+      }
+      
+      firestoreUser = userDoc.data();
+      
+      // Update with lastSync timestamp
+      await adminDb.collection('users').doc(uid).set({
+        ...firestoreUser,
+        lastSync: new Date().toISOString(),
+        syncStatus: 'synced'
+      }, { merge: true });
+    } catch (fbError: any) {
+      logger.warn('Firebase Admin not available for sync', { error: fbError.message });
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Firebase not configured or not available' 
+      }, { status: 500 });
     }
-
-    // Get user from Firestore
-    const userRef = doc(db, 'users', uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      return NextResponse.json({ success: false, error: 'User not found in Firestore' }, { status: 404 });
-    }
-
-    const firestoreUser = userSnap.data();
-    
-    // Update với lastSync timestamp
-    await setDoc(userRef, {
-      ...firestoreUser,
-      lastSync: new Date().toISOString(),
-      syncStatus: 'synced'
-    }, { merge: true });
 
     return NextResponse.json({
       success: true,

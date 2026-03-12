@@ -168,12 +168,12 @@ export default function WithdrawPage() {
 
     window.addEventListener("userUpdated", handleUserUpdate)
     
-    // ✅ FIX: Auto-refresh withdrawals mỗi 5 giây để có real-time updates
+    // ✅ BUG #10 FIX: Auto-refresh mỗi 30 giây thay vì 5 giây để tránh rate limit
     const refreshInterval = setInterval(() => {
       if (user?.email) {
         loadUserWithdrawals(user.email);
       }
-    }, 5000);
+    }, 30000);
     
     return () => {
       window.removeEventListener("userUpdated", handleUserUpdate)
