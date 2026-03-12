@@ -32,7 +32,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/${POSTGRES_DB:-postgres}?schema=public}
       DIRECT_URL: ${DIRECT_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/${POSTGRES_DB:-postgres}?schema=public}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://qtusdev.website}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://market-source.vercel.app}
       NODE_ENV: ${NODE_ENV:-production}
     ports:
       - "3000:3000"

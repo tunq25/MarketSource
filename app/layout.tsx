@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://qtusdevmarket.vercel.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://market-source.vercel.app"),
   alternates: {
     canonical: "/",
   },
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     siteName: "QtusDevMarket",
     images: [
       {
-        url: "/og-image.png",
+        url: "https://files.catbox.moe/qea4dw.png",
         width: 1200,
         height: 630,
         alt: "QtusDev Market - Digital Products Marketplace",
@@ -62,7 +62,7 @@ export const metadata: Metadata = {
     title: "QtusDev Market - Digital Products Marketplace",
     description:
       "Discover and purchase high-quality digital products, tools, and resources for developers and creators.",
-    images: ["/og-image.png"],
+    images: ["https://files.catbox.moe/qea4dw.png"],
     creator: "@qtusdevmarket",
   },
   robots: {
@@ -77,7 +77,7 @@ export const metadata: Metadata = {
     },
   },
   verification: {
-    google: "your-google-verification-code",
+    google: "google8b006f6d2da1b75b.html",
   },
   category: "technology",
   generator: 'Next.js',
@@ -92,7 +92,7 @@ export default function RootLayout({
     <html lang="vi" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/logoqtusdev.png" />
-        <link rel="apple-touch-icon" href="/logo1.png" />
+        <link rel="apple-touch-icon" href="/logoqtusdev.png" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#8b5cf6" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

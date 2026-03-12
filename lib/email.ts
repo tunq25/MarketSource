@@ -118,7 +118,7 @@ export async function sendEmail(options: EmailOptions) {
 // ============================================================
 export async function sendOtpEmail(email: string, otp: string) {
   const siteName = 'QTUS Dev Market';
-  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://qtusdev.website';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://market-source.vercel.app';
   const expiryMinutes = 15;
 
   const htmlTemplate = `
@@ -215,7 +215,7 @@ export async function sendOtpEmail(email: string, otp: string) {
 
 export async function sendWelcomeEmail(email: string, name: string) {
   const siteName = 'QTUS Dev Market';
-  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://qtusdev.website';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://market-source.vercel.app';
 
   const htmlTemplate = `
 <!DOCTYPE html>
@@ -289,7 +289,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
 
 export async function sendPurchaseConfirmationEmail(email: string, productName: string, amount: number) {
   const siteName = 'QTUS Dev Market';
-  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://qtusdev.website';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://market-source.vercel.app';
 
   const htmlTemplate = `
 <!DOCTYPE html>
@@ -376,7 +376,7 @@ export async function sendPurchaseConfirmationEmail(email: string, productName: 
 
 export async function sendPasswordResetEmail(email: string, resetToken: string) {
   const siteName = 'QTUS Dev Market';
-  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://qtusdev.website';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://market-source.vercel.app';
   const resetLink = `${siteUrl}/auth/reset-password?token=${resetToken}`;
 
   const htmlTemplate = `
@@ -440,7 +440,7 @@ export async function sendPasswordResetEmail(email: string, resetToken: string) 
 
 export async function sendDepositApprovalEmail(email: string, amount: number, newBalance: number) {
   const siteName = 'QTUS Dev Market';
-  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://qtusdev.website';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://market-source.vercel.app';
 
   const htmlTemplate = `
 <!DOCTYPE html>
@@ -513,7 +513,7 @@ export async function sendDepositApprovalEmail(email: string, amount: number, ne
 
 export async function sendSystemNotificationEmail(email: string, title: string, message: string) {
   const siteName = 'QTUS Dev Market';
-  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://qtusdev.website';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://market-source.vercel.app';
 
   const htmlTemplate = `
 <!DOCTYPE html>
