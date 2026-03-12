@@ -11,8 +11,8 @@ export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest): Promise<Response> {
   try {
-    // Rate limiting
-    const rateLimitResponse = await checkRateLimitAndRespond(request, 60, 60, 'deposits-get');
+    // Rate limiting - Relaxed for GET to avoid issues with multiple tabs
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 200, 60, 'deposits-get');
     if (rateLimitResponse) {
       return rateLimitResponse;
     }

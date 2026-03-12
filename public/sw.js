@@ -45,24 +45,37 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
+  // ✅ FIX: Only handle GET requests for caching
+  if (event.request.method !== 'GET') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
         // Clone the response
         const responseToCache = response.clone();
         
+        // Final check for GET and successful response
         if (event.request.method === 'GET' && response.status === 200) {
           caches.open(CACHE_NAME)
             .then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+              try {
+                cache.put(event.request, responseToCache);
+              } catch (e) {
+                // Ignore caching errors like 'Request method POST is unsupported'
+                console.warn('Cache put failed:', e);
+              }
+            }).catch(() => {});
         }
         
         return response;
       })
-      .catch(() => {
+      .catch(async () => {
         // Fallback to cache if network fails
-        return caches.match(event.request);
+        const matched = await caches.match(event.request);
+        return matched || new Response('Offline', { status: 503 });
       })
   );
 });

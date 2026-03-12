@@ -278,7 +278,7 @@ export default function DepositPage() {
 
     const refreshInterval = setInterval(() => {
       if (user?.email) loadUserDeposits(user.email)
-    }, 15000)
+    }, 30000)
 
     return () => {
       window.removeEventListener("userUpdated", handleUserUpdate)
