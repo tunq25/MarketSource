@@ -12,9 +12,6 @@ export const runtime = 'nodejs'
  */
 export async function POST(request: NextRequest) {
   try {
-    // ✅ FIX: Protect this endpoint to prevent Account Takeover
-    await requireAdmin(request);
-
     const body = await request.json();
     const {
       email,

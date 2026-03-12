@@ -96,18 +96,11 @@ export function CustomerSupport({ users, adminUser }: CustomerSupportProps) {
     // Telegram notification (fire-and-forget)
     try {
       const user = findUser(activeChat)
-      const csrfToken = localStorage.getItem('csrf-token')
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (csrfToken) headers['X-CSRF-Token'] = csrfToken
-
-      fetch('/api/admin/send-telegram', {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          message: `💬 <b>TIN NHẮN TỪ ADMIN</b>\n\n👤 <b>Gửi tới:</b> ${user?.name || user?.email}\n💬 <b>Nội dung:</b> ${msgText}`,
-          chatId: process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID
-        })
-      }).catch(() => { })
+      const { apiPost } = await import('@/lib/api-client');
+      apiPost('/api/admin/send-telegram', {
+        message: `💬 <b>TIN NHẮN TỪ ADMIN</b>\n\n👤 <b>Gửi tới:</b> ${user?.name || user?.email}\n💬 <b>Nội dung:</b> ${msgText}`,
+        chatId: process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID
+      }).catch(() => { });
     } catch { }
 
     setSending(false)

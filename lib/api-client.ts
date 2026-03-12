@@ -202,8 +202,13 @@ export async function apiRequest(
 
     // ✅ SECURITY FIX: Thêm CSRF token cho admin routes
     if (typeof window !== 'undefined' && endpoint.includes('/admin')) {
-      const csrfToken = getLocalStorage<string | null>('csrf-token', null);
+      // ✅ FIX: Get token directly because JSON.parse in getLocalStorage fails on raw string tokens
+      let csrfToken = window.localStorage.getItem('csrf-token');
       if (csrfToken) {
+        // Remove surrounding quotes if they exist (backward compatibility with setLocalStorage)
+        if (csrfToken.startsWith('"') && csrfToken.endsWith('"') && csrfToken.length >= 2) {
+          csrfToken = csrfToken.slice(1, -1);
+        }
         (headers as Record<string, string>)['X-CSRF-Token'] = csrfToken;
       }
     }
@@ -242,9 +247,10 @@ export async function apiRequest(
       });
     }
 
-    // ✅ FIX: Sử dụng fetchWithTimeout để tránh hang requests
+    // ✅ FIX: Sử dụng fetchWithTimeout để tránh hang requests, thêm credentials để gửi kèm cookie
     const response = await fetchWithTimeout(endpoint, {
       ...options,
+      credentials: options.credentials || 'include',
       headers: {
         ...headers,
         ...options.headers,
@@ -328,34 +334,37 @@ export async function apiGet(endpoint: string, params?: Record<string, any>) {
 /**
  * POST request
  */
-export async function apiPost(endpoint: string, data: any) {
+export async function apiPost(endpoint: string, data: any, options?: RequestInit) {
   return apiRequest(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
     body: JSON.stringify(data),
     credentials: 'include',
+    ...options
   });
 }
 
 /**
  * PUT request
  */
-export async function apiPut(endpoint: string, data: any) {
+export async function apiPut(endpoint: string, data: any, options?: RequestInit) {
   return apiRequest(endpoint, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
     body: JSON.stringify(data),
     credentials: 'include',
+    ...options
   });
 }
 
 /**
  * DELETE request
  */
-export async function apiDelete(endpoint: string) {
+export async function apiDelete(endpoint: string, options?: RequestInit) {
   return apiRequest(endpoint, {
     method: 'DELETE',
     credentials: 'include',
+    ...options
   });
 }
 

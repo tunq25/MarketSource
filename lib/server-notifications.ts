@@ -87,7 +87,7 @@ export async function notifyDepositRequest(payload: {
 🏦 <b>Phương thức:</b> ${escapeHTML(payload.method)}
 📝 <b>Mã giao dịch:</b> ${escapeHTML(payload.transactionId)}
 🌐 <b>IP:</b> ${escapeHTML(payload.ipAddress || 'Unknown')}
-📱 <b>${formatDeviceInfo(payload.deviceInfo)}
+📱 <b>${formatDeviceInfo(payload.deviceInfo)}</b>
 
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
 
@@ -126,7 +126,7 @@ export async function notifyWithdrawalRequest(payload: {
 🏦 <b>Ngân hàng:</b> ${escapeHTML(payload.bankName)}
 📝 <b>Tài khoản:</b> ${escapeHTML(payload.accountName)} - ${escapeHTML(payload.accountNumber)}
 🌐 <b>IP:</b> ${escapeHTML(payload.ipAddress || 'Unknown')}
-📱 <b>${formatDeviceInfo(payload.deviceInfo)}
+📱 <b>${formatDeviceInfo(payload.deviceInfo)}</b>
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
 
 <i>Vui lòng kiểm tra và xử lý!</i>`;
@@ -155,7 +155,7 @@ export async function notifyPasswordReset(payload: {
 
 📧 <b>Email:</b> ${escapeHTML(payload.email)}
 🌐 <b>IP:</b> ${escapeHTML(payload.ipAddress || 'Unknown')}
-📱 <b>${formatDeviceInfo(payload.deviceInfo)}
+📱 <b>${formatDeviceInfo(payload.deviceInfo)}</b>
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
 
 <i>Vui lòng kiểm tra yêu cầu này.</i>`;
@@ -205,7 +205,7 @@ export async function notifyNewUserRegistration(payload: {
 👤 <b>Tên:</b> ${escapeHTML(payload.userName || 'Unknown')}
 📧 <b>Email:</b> ${escapeHTML(payload.userEmail || 'Unknown')}
 🌐 <b>IP:</b> ${escapeHTML(payload.ipAddress || 'Unknown')}
-📱 <b>${formatDeviceInfo(payload.deviceInfo)}
+📱 <b>${formatDeviceInfo(payload.deviceInfo)}</b>
 ⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
 
 <i>Chào mừng thành viên mới!</i>`;

@@ -231,35 +231,62 @@ function AdminPageContent() {
   // ✅ FIX: Track processing purchases để tránh duplicate
   const [processingPurchase, setProcessingPurchase] = useState<Set<string>>(new Set())
 
-  // ✅ FIX: Load data function - Load products từ API
+  // ✅ FIX: Load data function toàn diện - Load mọi thứ từ database thông qua API
   const loadData = useCallback(async () => {
     try {
-      // Load products từ API
-      try {
-        const { apiGet } = await import('@/lib/api-client');
-        const { mapBackendProductsToFrontend } = await import('@/lib/product-mapper');
+      const { apiGet } = await import('@/lib/api-client');
+      const { mapBackendProductsToFrontend } = await import('@/lib/product-mapper');
+      const { userManager } = await import('@/lib/userManager');
+      const { loadDepositsAndWithdrawals } = await import('@/lib/admin-helpers');
+      const { logger } = await import('@/lib/logger');
 
-        const result = await apiGet('/api/products');
-        if (result.success && result.products) {
-          const mappedProducts = mapBackendProductsToFrontend(result.products);
-          setProducts(mappedProducts);
-        }
-      } catch (apiError) {
-        // ✅ FIX: Migrate console → logger
-        const { logger } = await import('@/lib/logger');
-        logger.error('Error loading products from API', apiError);
-        // Fallback to localStorage
-        const loadedProducts = JSON.parse(localStorage.getItem("uploadedProducts") || "[]");
-        setProducts(loadedProducts);
+      // Tải song song tất cả dữ liệu cần thiết cho dashboard
+      const [productsRes, purchasesRes, users, depositsWithdrawals] = await Promise.all([
+        apiGet('/api/products'),
+        apiGet('/api/purchases'),
+        userManager.getAllUsers(),
+        loadDepositsAndWithdrawals()
+      ]);
+
+      // 1. Cập nhật Products
+      if (productsRes.success && productsRes.products) {
+        const mappedProducts = mapBackendProductsToFrontend(productsRes.products);
+        setProducts(mappedProducts);
       }
 
-      // Load notifications from localStorage (unchanged)
+      // 2. Cập nhật Purchases (Giao dịch gần đây)
+      if (purchasesRes.success) {
+        const purchasesData = purchasesRes.purchases || purchasesRes.data || [];
+        setPurchases(purchasesData);
+      }
+
+      // 3. Cập nhật Users
+      if (users && users.length > 0) {
+        setUsers(users.map((user: any) => ({
+          ...user,
+          registrationTime: user.createdAt || user.joinedAt || new Date().toISOString(),
+          totalSpent: user.totalSpent || 0,
+          uid: user.uid || user.id,
+          status: user.role === 'admin' ? 'active' : (user.status || 'active')
+        })));
+      }
+
+      // 4. Cập nhật Notifications (từ localStorage cho tạm thời)
       const { getLocalStorage } = await import('@/lib/localStorage-utils');
       const loadedNotifications = getLocalStorage("adminNotifications", []);
       setNotifications(loadedNotifications);
+
+      // ✅ FIX: Dispatch các sự kiện để trigger UI cập nhật nếu cần
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('depositsUpdated'));
+        window.dispatchEvent(new CustomEvent('withdrawalsUpdated'));
+        window.dispatchEvent(new CustomEvent('userUpdated'));
+      }
+
+      logger.info('Admin Dashboard: All data reloaded successfully');
     } catch (error) {
       const { logger } = await import('@/lib/logger');
-      logger.error("Error loading data", error);
+      logger.error("Error loading admin data", error);
     }
   }, [])
 
@@ -281,6 +308,12 @@ function AdminPageContent() {
             const { setLocalStorage } = await import('@/lib/localStorage-utils')
             setLocalStorage("adminAuth", "true")
             setLocalStorage("adminUser", JSON.stringify(data.user))
+
+            // ✅ FIX: Lưu lại CSRF token mới từ server (nếu có) để client gọi API không bị lỗi
+            if (data.csrfToken) {
+              setLocalStorage("csrf-token", data.csrfToken)
+            }
+
             setIsLoading(false)
             return
           }
@@ -444,11 +477,20 @@ function AdminPageContent() {
 
       // Load purchases from database (vẫn cần load vì listenPurchases không tự load data nếu cache còn hạn)
       loadPurchases();
+      // ✅ FIX: Chủ động chạy hàm loadDeposits và loadWithdrawals lần đầu tiên
+      loadDeposits();
+      loadWithdrawals();
 
-      // Stub listeners (no-op)
-      const unsubscribeDeposits = onDepositsChange(() => { });
-      const unsubscribeWithdrawals = onWithdrawalsChange(() => { });
-      const unsubscribePurchases = onPurchasesChange(() => { });
+      // ✅ FIX: Thay callback trống () => {} bằng chính function update list để data nhảy tự động khi có biến!
+      const unsubscribeDeposits = onDepositsChange(() => {
+        loadDeposits();
+      });
+      const unsubscribeWithdrawals = onWithdrawalsChange(() => {
+        loadWithdrawals();
+      });
+      const unsubscribePurchases = onPurchasesChange(() => {
+        loadPurchases();
+      });
 
       return () => {
         unsubscribeUsers()
@@ -612,32 +654,20 @@ function AdminPageContent() {
 
   // Enhanced Deposit/Withdrawal management functions with account independence
 
-  // Function to process the deposit approval - moved before approveDeposit
+  // Function to process the deposit approval
   const processDepositApproval = useCallback(async (deposit: any, adminUser: any) => {
     try {
-      const csrfToken = localStorage.getItem('csrf-token');
-      // ✅ FIX: Thêm Authorization header, userEmail và CSRF Token
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-      }
-      // ✅ FIX: Admin token đã được set trong httpOnly cookie, không cần lấy từ localStorage
-      // Cookie sẽ tự động được gửi kèm request
+      const { apiPost } = await import('@/lib/api-client');
 
-      // Call the API to approve the deposit
-      const response = await fetch('/api/admin/approve-deposit', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          depositId: deposit.id,
-          amount: deposit.amount,
-          userId: deposit.user_id || deposit.userId,
-          userEmail: deposit.userEmail || deposit.user_email,
-          action: 'approve',
-        }),
+      // ✅ FIX: Dùng apiPost để tự động xử lý CSRF token từ localStorage và Cookie
+      const result = await apiPost('/api/admin/approve-deposit', {
+        depositId: deposit.id,
+        amount: deposit.amount,
+        userId: deposit.user_id || deposit.userId,
+        userEmail: deposit.userEmail || deposit.user_email,
+        action: 'approve',
       });
 
-      const result = await response.json();
       if (!result.success) {
         alert(`Lỗi khi duyệt nạp tiền: ${result.error}`);
         return;
@@ -698,26 +728,14 @@ function AdminPageContent() {
 
 <i>Số dư đã được cộng vào tài khoản khách hàng!</i>`
 
-        // ✅ FIX: Admin token đã được set trong httpOnly cookie, không cần localStorage
-        // Gửi CSRF token trong header
-        const csrfToken = localStorage.getItem('csrf-token');
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (csrfToken) {
-          headers['X-CSRF-Token'] = csrfToken;
-        }
-
-        await fetch('/api/admin/send-telegram', {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            message: telegramMessage,
-            chatId: process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID
-          })
+        const { apiPost } = await import('@/lib/api-client');
+        await apiPost('/api/admin/send-telegram', {
+          message: telegramMessage,
+          chatId: process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID
         }).catch(async (error) => {
-          // ✅ FIX: Migrate console → logger
           const { logger } = await import('@/lib/logger');
           logger.error('Failed to send Telegram notification', error);
-        })
+        });
 
         await saveNotification({
           type: "deposit_approved",
@@ -798,10 +816,21 @@ function AdminPageContent() {
 
   const processDepositRejection = async (deposit: any) => {
     try {
-      const updatedDeposit = { ...deposit, status: "rejected" };
-      await saveDeposit(updatedDeposit);
+      // ✅ FIX: Gọi admin API route thay vì saveDeposit() để đảm bảo CSRF + admin auth
+      const { apiPost } = await import('@/lib/api-client');
+      const result = await apiPost('/api/admin/approve-deposit', {
+        depositId: deposit.id,
+        amount: deposit.amount,
+        userId: deposit.user_id || deposit.userId,
+        userEmail: deposit.userEmail || deposit.user_email,
+        action: 'reject',
+      });
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to reject deposit');
+      }
+      // Reload data sau khi reject thành công
+      await loadData();
     } catch (error) {
-      // ✅ FIX: Migrate console → logger
       const { logger } = await import('@/lib/logger');
       logger.error("Error in processDepositRejection", error);
       throw error;
@@ -850,29 +879,16 @@ function AdminPageContent() {
         return;
       }
 
-      const csrfToken = localStorage.getItem('csrf-token');
-      // ✅ FIX: Thêm Authorization header, userEmail và CSRF Token
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-      }
-      // ✅ FIX: Admin token đã được set trong httpOnly cookie, không cần lấy từ localStorage
-      // Cookie sẽ tự động được gửi kèm request
-
-      // Call API để approve withdrawal (API sẽ update balance qua userManager)
-      const response = await fetch('/api/admin/approve-withdrawal', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          withdrawalId: withdrawal.id,
-          amount: withdrawal.amount,
-          userId: withdrawal.userId || withdrawal.user_id,
-          userEmail: withdrawal.userEmail || withdrawal.user_email,
-          action: 'approve',
-        }),
+      // ✅ FIX: Dùng apiPost để tự động xử lý CSRF token và credentials
+      const { apiPost } = await import('@/lib/api-client');
+      const result = await apiPost('/api/admin/approve-withdrawal', {
+        withdrawalId: withdrawal.id,
+        amount: withdrawal.amount,
+        userId: withdrawal.userId || withdrawal.user_id,
+        userEmail: withdrawal.userEmail || withdrawal.user_email,
+        action: 'approve',
       });
 
-      const result = await response.json();
       if (!result.success) {
         alert(`Lỗi khi duyệt rút tiền: ${result.error}`);
         return;
@@ -946,24 +962,11 @@ function AdminPageContent() {
 
 <i>Vui lòng chuyển khoản cho khách hàng!</i>`;
 
-        // ✅ SECURITY FIX: Admin token đã được set trong httpOnly cookie, không cần lấy từ localStorage
-        // Cookie sẽ tự động được gửi kèm request
-        // Gửi CSRF token trong header nếu có
-        const csrfToken = localStorage.getItem('csrf-token');
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (csrfToken) {
-          headers['X-CSRF-Token'] = csrfToken;
-        }
-
-        await fetch('/api/admin/send-telegram', {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            message: telegramMessage,
-            chatId: process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID
-          })
+        const { apiPost } = await import('@/lib/api-client');
+        await apiPost('/api/admin/send-telegram', {
+          message: telegramMessage,
+          chatId: process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID
         }).catch(async (error) => {
-          // ✅ FIX: Migrate console → logger
           const { logger } = await import('@/lib/logger');
           logger.error('Failed to send Telegram notification', error);
         });
@@ -1015,10 +1018,21 @@ function AdminPageContent() {
 
   const processWithdrawalRejection = async (withdrawal: any) => {
     try {
-      const updatedWithdrawal = { ...withdrawal, status: "rejected" };
-      await saveWithdrawal(updatedWithdrawal);
+      // ✅ FIX: Gọi admin API route thay vì saveWithdrawal() để đảm bảo CSRF + admin auth
+      const { apiPost } = await import('@/lib/api-client');
+      const result = await apiPost('/api/admin/approve-withdrawal', {
+        withdrawalId: withdrawal.id,
+        amount: withdrawal.amount,
+        userId: withdrawal.user_id || withdrawal.userId,
+        userEmail: withdrawal.userEmail || withdrawal.user_email,
+        action: 'reject',
+      });
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to reject withdrawal');
+      }
+      // Reload data sau khi reject thành công
+      await loadData();
     } catch (error) {
-      // ✅ FIX: Migrate console → logger
       const { logger } = await import('@/lib/logger');
       logger.error("Error in processWithdrawalRejection", error);
       throw error;
@@ -1173,23 +1187,11 @@ function AdminPageContent() {
 
 <i>Hệ thống thông báo đang hoạt động bình thường.</i>`
 
-      // ✅ SECURITY FIX: Admin token đã được set trong httpOnly cookie, không cần lấy từ localStorage
-      // Cookie sẽ tự động được gửi kèm request
-      // Gửi CSRF token trong header nếu có
-      const csrfToken = localStorage.getItem('csrf-token');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-      }
-
-      const response = await fetch('/api/admin/send-telegram', {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          message: testMessage,
-          chatId: process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID
-        })
-      })
+      const { apiPost } = await import('@/lib/api-client');
+      const response = await apiPost('/api/admin/send-telegram', {
+        message: testMessage,
+        chatId: process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID
+      });
 
       if (response.ok) {
         await saveNotification({
@@ -1241,9 +1243,8 @@ Hệ thống thông báo đang hoạt động bình thường.`
       alert("❌ Lỗi khi mở WhatsApp!")
     }
   }, [adminUser])
-
   // Calculate stats
-  const getStats = useCallback(() => {
+  const stats = useMemo(() => {
     const totalUsers = users.length
     const totalProducts = products.length
     const totalRevenue = purchases.reduce((sum, purchase) => {
@@ -1253,7 +1254,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
     const pendingDepositsCount = pendingDeposits.filter(d => d.status !== "rejected").length
     const pendingWithdrawalsCount = pendingWithdrawals.filter(w => w.status !== "rejected").length
     const newUsersCount = users.filter(user => {
-      const registrationDate = new Date(user.created_at || (user as { createdAt?: string | Date }).createdAt || new Date())
+      const registrationDate = new Date(user.created_at || (user as any).createdAt || new Date())
       const now = new Date()
       const diffTime = Math.abs(now.getTime() - registrationDate.getTime())
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
@@ -1271,8 +1272,6 @@ Hệ thống thông báo đang hoạt động bình thường.`
     }
   }, [users, products, purchases, pendingDeposits, pendingWithdrawals])
 
-  const stats = getStats()
-
   const bulkUsers = useMemo(() => {
     return users.map((user) => {
       const key = (user.uid || user.id || "").toString()
@@ -1288,8 +1287,8 @@ Hệ thống thông báo đang hoạt động bình thường.`
       id: `purchase-${purchase.id}`,
       type: "purchase",
       status: "completed",
-      method: purchase.method || "balance",
-      amount: purchase.amount || 0,
+      method: "balance",
+      amount: purchase.amount || purchase.price || 0,
       date: purchase.purchaseDate || purchase.created_at || new Date().toISOString(),
       email: purchase.userEmail || purchase.user_email,
       description: purchase.product_title || "Sản phẩm",

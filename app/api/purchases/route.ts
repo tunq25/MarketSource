@@ -49,13 +49,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ✅ FIX: Convert userId đúng cách (number hoặc string)
+    // ✅ SECURITY FIX: Nếu không phải admin, bắt buộc phải lọc theo userId của chính người dùng đó
     let dbUserId: number | undefined = undefined
-    if (userId) {
-      if (!isNaN(parseInt(userId))) {
-        dbUserId = parseInt(userId)
-      } else {
-        dbUserId = await getUserIdByEmail(authUser?.email || "") || undefined
+    if (isAdmin) {
+      // Admin có thể xem tất cả hoặc xem theo userId cụ thể nếu có param
+      if (userId) {
+        if (!isNaN(parseInt(userId))) {
+          dbUserId = parseInt(userId)
+        } else {
+          dbUserId = await getUserIdByEmail(userId) || undefined // Thử search theo email nếu userId là string email
+        }
+      }
+    } else if (authUser) {
+      // User thường chỉ được xem của chính mình. 
+      // Luôn lấy DB ID từ email của chính token đó để đảm bảo an toàn (IDOR protection)
+      dbUserId = await getUserIdByEmail(authUser.email || "") || undefined
+      
+      if (!dbUserId) {
+        return NextResponse.json({ success: false, error: 'User profile not found' }, { status: 404 });
       }
     }
 

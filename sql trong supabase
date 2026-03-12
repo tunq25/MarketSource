@@ -115,6 +115,15 @@ CREATE TABLE public.api_logs (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT api_logs_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.app_settings (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  setting_key character varying NOT NULL UNIQUE,
+  setting_value text,
+  description text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT app_settings_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.audit_logs (
   id bigint NOT NULL DEFAULT nextval('audit_logs_id_seq'::regclass),
   user_id bigint,
@@ -170,6 +179,9 @@ CREATE TABLE public.banners (
   starts_at timestamp with time zone,
   ends_at timestamp with time zone,
   created_at timestamp with time zone DEFAULT now(),
+  title character varying,
+  display_order integer DEFAULT 0,
+  updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT banners_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.blog_categories (
@@ -373,6 +385,7 @@ CREATE TABLE public.coupons (
   is_active boolean DEFAULT true,
   created_by bigint,
   created_at timestamp with time zone DEFAULT now(),
+  title character varying,
   CONSTRAINT coupons_pkey PRIMARY KEY (id),
   CONSTRAINT coupons_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
 );
@@ -1070,6 +1083,8 @@ CREATE TABLE public.products (
   thumbnail character varying,
   user_id integer,
   search_vector tsvector,
+  detailed_description text,
+  image_urls text,
   CONSTRAINT products_pkey PRIMARY KEY (id),
   CONSTRAINT products_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id),
   CONSTRAINT products_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
@@ -1602,6 +1617,7 @@ CREATE TABLE public.wishlists (
   user_id bigint,
   product_id bigint,
   created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT wishlists_pkey PRIMARY KEY (id),
   CONSTRAINT wishlists_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
   CONSTRAINT wishlists_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)

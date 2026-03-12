@@ -12,9 +12,13 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdmin(request)
+    // ✅ FIX: Trả về CSRF Token mới mỗi khi Verify thành công để Client setup Header
+    const { generateCSRFToken, setCSRFTokenCookie } = await import('@/lib/csrf')
+    const csrfToken = generateCSRFToken()
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
+      csrfToken,
       user: {
         id: 'admin',
         email: admin.email,
@@ -22,6 +26,9 @@ export async function GET(request: NextRequest) {
         role: 'admin',
       },
     })
+    
+    // Set CSRF token cookie
+    return setCSRFTokenCookie(response, csrfToken)
   } catch (error) {
     logger.warn('Admin verification failed', {
       error: error instanceof Error ? error.message : error,

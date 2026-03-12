@@ -12,7 +12,7 @@ export const runtime = 'nodejs'
 export async function GET(request: NextRequest): Promise<Response> {
   try {
     // Rate limiting
-    const rateLimitResponse = await checkRateLimitAndRespond(request, 10, 10, 'deposits-get');
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 60, 60, 'deposits-get');
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
@@ -31,30 +31,23 @@ export async function GET(request: NextRequest): Promise<Response> {
       }, { status: 401 });
     }
 
-    // Nếu có userId param và không phải admin → verify chính là user đó
-    // ✅ FIX: So sánh đúng cách - cần convert userId từ DB sang uid hoặc ngược lại
-    if (userId && authUser && !isAdmin) {
-      // userId từ query param có thể là number (PostgreSQL ID) hoặc string (Firebase UID)
-      // Cần check bằng cách so sánh email hoặc convert userId sang uid
-      const dbUserId = await getUserIdByEmail(authUser.email || '');
-      const userIdNum = parseInt(userId);
-
-      if (dbUserId !== userIdNum && authUser.uid !== userId) {
-        return NextResponse.json({
-          success: false,
-          error: 'Unauthorized: Can only view your own deposits'
-        }, { status: 403 });
-      }
-    }
-
-    // ✅ FIX: Nếu userId là string (uid), cần convert sang number (DB ID)
+    // ✅ SECURITY FIX: Nếu không phải admin, bắt buộc phải lọc theo userId của chính người dùng đó
+    // Đảm bảo user thường không thể xem deposits của người khác bằng cách bỏ trống userId param (IDOR)
     let dbUserId: number | undefined = undefined;
-    if (userId) {
-      if (isNaN(parseInt(userId))) {
-        // userId là string (uid), cần tìm DB ID
-        dbUserId = await getUserIdByEmail(authUser?.email || '') || undefined;
-      } else {
-        dbUserId = parseInt(userId);
+    if (isAdmin) {
+      if (userId) {
+        if (!isNaN(parseInt(userId))) {
+          dbUserId = parseInt(userId);
+        } else {
+          dbUserId = await getUserIdByEmail(userId) || undefined; // search theo email nếu userId là string
+        }
+      }
+    } else if (authUser) {
+      // User thường: Luôn chỉ lấy deposits của chính mình
+      dbUserId = await getUserIdByEmail(authUser.email || '') || undefined;
+      
+      if (!dbUserId) {
+        return NextResponse.json({ success: false, error: 'User profile not found' }, { status: 404 });
       }
     }
 

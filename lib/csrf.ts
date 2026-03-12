@@ -46,10 +46,18 @@ export function csrfProtection(request: NextRequest): { valid: boolean; error?: 
   const csrfCookie = request.cookies.get('csrf-token')?.value;
 
   if (!csrfToken || !csrfCookie) {
+    if (process.env.NODE_ENV === 'development') {
+      const { logger } = require('@/lib/logger');
+      logger.error('CSRF token missing', { hasTokenHeader: !!csrfToken, hasCookie: !!csrfCookie });
+    }
     return { valid: false, error: 'CSRF token missing' };
   }
 
   if (!verifyCSRFToken(csrfToken, csrfCookie)) {
+    if (process.env.NODE_ENV === 'development') {
+      const { logger } = require('@/lib/logger');
+      logger.error('Invalid CSRF token', { csrfToken, csrfCookie });
+    }
     return { valid: false, error: 'Invalid CSRF token' };
   }
 

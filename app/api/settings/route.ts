@@ -91,11 +91,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: true, settings: settingsObj })
     } catch (error: any) {
         logger.error('Error fetching settings', error)
+        const isUnauthorized = error.message?.includes('Unauthorized') || error.message?.includes('auth');
         return NextResponse.json({
-            error: 'Failed to fetch settings',
+            error: isUnauthorized ? 'Unauthorized access. Admin privileges required.' : 'Failed to fetch settings',
             detail: error.message,
             settings: {}
-        }, { status: 500 })
+        }, { status: isUnauthorized ? 401 : 500 })
     }
 }
 
@@ -145,7 +146,8 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ success: true, message: 'Cập nhật cài đặt thành công' })
     } catch (error: any) {
         logger.error('Error updating settings', { error: error.message || error.toString() })
-        return NextResponse.json({ error: error.message || 'Lỗi khi cập nhật cài đặt' }, { status: 500 })
+        const isUnauthorized = error.message?.includes('Unauthorized') || error.message?.includes('auth');
+        return NextResponse.json({ error: isUnauthorized ? 'Unauthorized access. Admin privileges required.' : (error.message || 'Lỗi khi cập nhật cài đặt') }, { status: isUnauthorized ? 401 : 500 })
     }
 }
 

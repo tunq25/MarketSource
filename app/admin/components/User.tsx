@@ -55,25 +55,13 @@ export function User({ users, updateUserStatus, updateUserBalance }: UserProps) 
 
     setIsChangingPassword(true);
     try {
-      const csrfToken = localStorage.getItem('csrf-token');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-      }
-
-      const response = await fetch('/api/admin/reset-user-password', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          userId: passwordDialogProps.userId,
-          userEmail: passwordDialogProps.userEmail,
-          newPassword
-        })
+      const { apiPost } = await import('@/lib/api-client');
+      const result = await apiPost('/api/admin/reset-user-password', {
+         userId: passwordDialogProps.userId,
+         userEmail: passwordDialogProps.userEmail,
+         newPassword
       });
 
-      const result = await response.json();
       if (result.success) {
         alert('Đổi mật khẩu thành công!');
         setPasswordDialogProps({ ...passwordDialogProps, isOpen: false });
@@ -93,22 +81,12 @@ export function User({ users, updateUserStatus, updateUserBalance }: UserProps) 
     setSyncingUsers(prev => new Set(prev).add(uid));
 
     try {
-      const csrfToken = localStorage.getItem('csrf-token');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'X-Admin-Auth': 'true'
-      };
-      if (csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-      }
-
-      const response = await fetch('/api/admin/force-sync-user', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ uid })
+      const { apiPost } = await import('@/lib/api-client');
+      const result = await apiPost('/api/admin/force-sync-user', { uid }, {
+        headers: {
+          'X-Admin-Auth': 'true'
+        }
       });
-
-      const result = await response.json();
 
       if (result.success) {
         alert('Đồng bộ thành công!');
