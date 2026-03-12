@@ -9,9 +9,7 @@ const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY
 const endpoint = process.env.S3_ENDPOINT
 const publicBaseUrl = process.env.S3_PUBLIC_BASE_URL
 
-if (!bucket || !region || !accessKeyId || !secretAccessKey) {
-  logger.warn("S3 avatar upload disabled: missing credentials")
-}
+// Suppressed module level warnings
 
 function getClient() {
   if (!bucket || !region || !accessKeyId || !secretAccessKey) {

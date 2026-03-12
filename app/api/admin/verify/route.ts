@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/api-auth'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 /**
  * Verify admin authentication from cookie
