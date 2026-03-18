@@ -63,7 +63,9 @@ export function Analytics({ users, products, purchases, deposits, withdrawals }:
     const totalRevenue = filteredPurchases.reduce((sum, p) => sum + (p.amount || 0), 0)
     const totalDeposits = filteredDeposits.reduce((sum, d) => sum + (d.amount || 0), 0)
     const totalWithdrawals = filteredWithdrawals.reduce((sum, w) => sum + (w.amount || 0), 0)
-    const netRevenue = totalRevenue + totalDeposits - totalWithdrawals
+    // ✅ FIX: netRevenue chỉ tính từ sales (purchases), không cộng deposits vào
+    // Deposits là tiền nạp của user, không phải doanh thu bán hàng
+    const netRevenue = totalRevenue
 
     // User analytics
     const activeUsers = users.filter(user => {
@@ -132,7 +134,13 @@ export function Analytics({ users, products, purchases, deposits, withdrawals }:
       averageOrderValue: totalRevenue / (filteredPurchases.length || 1),
       conversionRate: (filteredPurchases.length / (filteredUsers.length || 1)) * 100,
       repeatCustomers: users.filter(user => {
-        const userPurchases = purchases.filter(p => p.user_id === user.uid)
+        const userId = (user.uid || user.id)?.toString()
+        const userPurchases = purchases.filter(p => {
+          // ✅ FIX: so sánh đúng field — purchases dùng user_id hoặc userId
+          const pUserId = (p.user_id || p.userId || p.uid)?.toString()
+          const pEmail = p.userEmail || p.user_email || p.email
+          return pUserId === userId || pEmail === user.email
+        })
         return userPurchases.length > 1
       }).length
     }

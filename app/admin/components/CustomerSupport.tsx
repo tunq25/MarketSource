@@ -13,7 +13,8 @@ interface CustomerSupportProps {
   adminUser: any
 }
 
-export function CustomerSupport({ users, adminUser }: CustomerSupportProps) {
+export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupportProps) {
+  const [localUsers, setLocalUsers] = useState<any[]>([])
   const [activeChat, setActiveChat] = useState<string | null>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState("")
@@ -21,7 +22,39 @@ export function CustomerSupport({ users, adminUser }: CustomerSupportProps) {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
+  const [fetchingUsers, setFetchingUsers] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // ✅ FIX: Merge propUsers + tự fetch từ API nếu propUsers ít hơn thực tế
+  const users = localUsers.length > 0 ? localUsers : propUsers
+
+  // ✅ FIX: Tự fetch users từ API để luôn hiển thị đầy đủ
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setFetchingUsers(true)
+      try {
+        const { apiGet } = await import('@/lib/api-client')
+        const result = await apiGet('/api/users')
+        if (result?.users && Array.isArray(result.users)) {
+          setLocalUsers(result.users.map((u: any) => ({
+            ...u,
+            uid: u.uid || u.id,
+          })))
+        } else if (result?.data && Array.isArray(result.data)) {
+          setLocalUsers(result.data.map((u: any) => ({
+            ...u,
+            uid: u.uid || u.id,
+          })))
+        }
+      } catch (error) {
+        logger.warn('Could not fetch users from API, using prop users', { error })
+      } finally {
+        setFetchingUsers(false)
+      }
+    }
+    fetchUsers()
+  }, [])
+
 
   // Debounce search
   useEffect(() => {
