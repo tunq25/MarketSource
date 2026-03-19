@@ -223,22 +223,34 @@ export default function ProductDetailPage() {
                       prose-strong:text-purple-700 dark:prose-strong:text-purple-100"
                                         dangerouslySetInnerHTML={{
                                             __html: (() => {
-                                                const raw = product.detailedDescription;
-                                                // ✅ FIX: Nếu là plain text (không có HTML tags) → convert \n thành <br>
-                                                const isPlainText = !/<[a-z][\s\S]*>/i.test(raw);
-                                                const withLineBreaks = isPlainText
-                                                    ? raw.replace(/\n/g, '<br />')
-                                                    : raw;
+                                                const raw = product.detailedDescription || '';
+                                                let html = raw;
+                                                
+                                                // ✅ FIX: Đồng bộ Regex render Markdown giống hệt Admin Panel
+                                                const isHtml = /<[a-z][\s\S]*>/i.test(raw);
+                                                
+                                                if (!isHtml || raw.includes('**') || raw.includes('##')) {
+                                                    html = raw
+                                                        .replace(/\n/g, '<br/>')
+                                                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-gray-900 dark:text-white">$1</strong>')
+                                                        .replace(/\*(.*?)\*/g, '<em class="text-gray-600 dark:text-gray-400">$1</em>')
+                                                        .replace(/## (.*)/g, '<h2 class="text-xl font-bold mt-6 mb-3 text-purple-600 dark:text-purple-400 border-b border-gray-200 dark:border-gray-800 pb-2">$1</h2>')
+                                                        .replace(/### (.*)/g, '<h3 class="text-lg font-bold mt-4 mb-2 text-purple-500 dark:text-purple-300">$1</h3>')
+                                                        .replace(/- (.*)/g, '<span class="text-purple-500 mr-2">•</span> $1')
+                                                        .replace(/`([^`]+)`/g, '<code class="bg-black/5 dark:bg-white/10 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>')
+                                                        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 hover:underline">$1</a>');
+                                                }
+
                                                 // ✅ SECURITY: Sanitize HTML
                                                 try {
                                                     const DOMPurify = require('isomorphic-dompurify');
-                                                    return DOMPurify.sanitize(withLineBreaks, {
+                                                    return DOMPurify.sanitize(html, {
                                                         ALLOWED_TAGS: ['h1','h2','h3','h4','h5','h6','p','br','strong','em','b','i','u','a','ul','ol','li','img','blockquote','pre','code','table','thead','tbody','tr','th','td','hr','span','div','figure','figcaption'],
                                                         ALLOWED_ATTR: ['href','src','alt','title','class','target','rel','width','height'],
                                                         ALLOW_DATA_ATTR: false,
                                                     });
                                                 } catch {
-                                                    return withLineBreaks.replace(/<script[\s\S]*?<\/script>/gi, '');
+                                                    return html.replace(/<script[\s\S]*?<\/script>/gi, '');
                                                 }
                                             })()
                                         }}

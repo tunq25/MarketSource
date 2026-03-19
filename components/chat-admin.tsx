@@ -43,14 +43,37 @@ export function ChatAdmin() {
 
   const loadChatUsers = useCallback(async () => {
     try {
-      const result = await apiGet('/api/chat')
-      if (!result || !result.success) return
+      // ✅ FIX: Lấy TOÀN BỘ user từ DB + Lấy lịch sử chat
+      const [chatResult, usersResult] = await Promise.all([
+        apiGet('/api/chat').catch(() => null),
+        apiGet('/api/users').catch(() => null)
+      ])
 
-      const allMessages = result.messages || []
+      const allMessages = chatResult?.messages || []
+      const allUsers = usersResult?.users || usersResult?.data || []
+      
       const userMap = new Map<number, ChatUser>()
 
+      // 1. Map toàn bộ users trước tiên
+      if (Array.isArray(allUsers)) {
+        allUsers.forEach((u: any) => {
+          const userId = u.id || u.uid || u.user_id
+          if (!userId) return
+
+          userMap.set(userId, {
+            userId: Number(userId),
+            userName: u.name || u.username || u.email || 'User',
+            userEmail: u.email || '',
+            unreadCount: 0,
+            lastMessage: '',
+            lastMessageTime: '',
+          })
+        })
+      }
+
+      // 2. Gộp lịch sử tin nhắn vào userMap
       allMessages.forEach((msg: any) => {
-        const userId = msg.user_id
+        const userId = Number(msg.user_id)
         if (!userId) return
 
         if (!userMap.has(userId)) {
@@ -80,9 +103,13 @@ export function ChatAdmin() {
         }
       })
 
+      // Sort: Những người có tin nhắn gần nhất lên đầu. Chưa có tin nhắn thì xếp bảng chữ cái.
       setChatUsers(Array.from(userMap.values()).sort((a, b) => {
         const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0
         const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0
+        if (timeA === 0 && timeB === 0) {
+          return a.userName.localeCompare(b.userName)
+        }
         return timeB - timeA
       }))
     } catch (error) {

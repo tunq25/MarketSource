@@ -13,8 +13,15 @@ import {
   Download, ExternalLink, Edit, Trash2, Plus, Eye, Search,
   Image as ImageIcon, Star, RotateCcw, Check, X, Bold, Italic,
   Type, List, Link, AlignLeft, Package, ChevronDown, ChevronUp,
-  Grid3x3, LayoutList
+  Grid3x3, LayoutList, Maximize2
 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client"
 import { mapBackendToFrontend, mapFrontendToBackend, mapBackendProductsToFrontend } from "@/lib/product-mapper"
 
@@ -289,8 +296,8 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
     (Array.isArray(p.tags) && p.tags.some((t: string) => t.toLowerCase().includes(searchTerm.toLowerCase())))
   )
 
-  // ✅ Product Form Component (dùng lại cho cả add và edit)
-  const ProductForm = ({ form, setForm, onSubmit, submitLabel, descRef }: {
+  // ✅ Product Form Render Function (chuyển thành hàm để tránh bị React unmount/remount gây mất focus)
+  const renderProductForm = ({ form, setForm, onSubmit, submitLabel, descRef }: {
     form: any, setForm: (f: any) => void, onSubmit: () => void,
     submitLabel: string, descRef: React.RefObject<HTMLTextAreaElement>
   }) => (
@@ -437,17 +444,63 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
             }}
           />
         ) : (
-          <>
-            <RichTextToolbar textareaRef={descRef} value={form.detailedDescription || ''} onChange={v => setForm({ ...form, detailedDescription: v })} />
+          <div className="space-y-2">
             <Textarea
-              ref={descRef}
               value={form.detailedDescription || ''}
-              placeholder="Viết mô tả chi tiết sản phẩm (hỗ trợ **bold**, *italic*, ## Heading, - danh sách)"
+              placeholder="Viết mô tả chi tiết sản phẩm..."
               onChange={e => setForm({ ...form, detailedDescription: e.target.value })}
-              rows={10}
-              className="bg-gray-800/50 border-gray-600/50 border-t-0 rounded-t-none text-white placeholder:text-gray-600 focus:border-purple-500/50 resize-y font-mono text-sm"
+              rows={4}
+              className="bg-gray-800/50 border-gray-600/50 text-white placeholder:text-gray-600 focus:border-purple-500/50 resize-y font-mono text-sm"
             />
-          </>
+            <Dialog>
+              <DialogTrigger asChild>
+                <div className="flex justify-end">
+                  <Button type="button" variant="outline" size="sm" className="h-8 bg-purple-600/10 border-purple-500/30 hover:bg-purple-600/20 text-purple-300">
+                    <Maximize2 className="w-3.5 h-3.5 mr-1.5" /> Mở rộng khung soạn thảo chuyên nghiệp
+                  </Button>
+                </div>
+              </DialogTrigger>
+              <DialogContent className="max-w-[95vw] w-[1200px] h-[85vh] flex flex-col bg-gray-950 border-gray-700 p-0 shadow-2xl">
+                <DialogHeader className="p-4 border-b border-gray-800 bg-gray-900/80 shrink-0">
+                  <DialogTitle className="text-white flex items-center gap-2">
+                    <Type className="w-5 h-5 text-purple-400" />
+                    Soạn thảo Mô tả chi tiết
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2">
+                   {/* LEFT: Editor */}
+                   <div className="flex flex-col border-r border-gray-800 h-full p-4 gap-2 bg-gray-900/30">
+                     <RichTextToolbar textareaRef={descRef} value={form.detailedDescription || ''} onChange={v => setForm({ ...form, detailedDescription: v })} />
+                     <Textarea
+                        ref={descRef}
+                        value={form.detailedDescription || ''}
+                        placeholder="Viết mô tả..."
+                        onChange={e => setForm({ ...form, detailedDescription: e.target.value })}
+                        className="flex-1 bg-gray-950 border-gray-700 text-gray-300 focus:border-purple-500/50 resize-none font-mono text-sm p-4 h-full"
+                     />
+                   </div>
+                   {/* RIGHT: Preview */}
+                   <div className="p-6 h-full overflow-y-auto bg-gray-900/50 custom-scrollbar">
+                     <h3 className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">Live Preview</h3>
+                     <div
+                        className="prose prose-invert prose-sm xl:prose-base max-w-none text-gray-300 break-words whitespace-pre-wrap"
+                        dangerouslySetInnerHTML={{
+                          __html: (form.detailedDescription || '')
+                            .replace(/\n/g, '<br/>')
+                            .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+                            .replace(/\*(.*?)\*/g, '<em class="text-gray-400">$1</em>')
+                            .replace(/## (.*)/g, '<h2 class="text-xl font-bold mt-6 mb-3 text-purple-300 border-b border-gray-800 pb-2">$1</h2>')
+                            .replace(/### (.*)/g, '<h3 class="text-lg font-bold mt-4 mb-2 text-purple-400">$1</h3>')
+                            .replace(/- (.*)/g, '<span class="text-purple-500 mr-2">•</span> $1')
+                            .replace(/`([^`]+)`/g, '<code class="bg-gray-800 text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>')
+                            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-400 hover:underline hover:text-blue-300">$1</a>')
+                        }}
+                     />
+                   </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         )}
       </div>
 
@@ -540,17 +593,17 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
 
           <CardContent className="flex-1 overflow-y-auto py-4 custom-scrollbar">
             {activeTab === 'add' ? (
-              <ProductForm
-                form={newProduct} setForm={setNewProduct}
-                onSubmit={addProduct} submitLabel="Thêm sản phẩm"
-                descRef={newDescRef}
-              />
+              renderProductForm({
+                form: newProduct, setForm: setNewProduct,
+                onSubmit: addProduct, submitLabel: "Thêm sản phẩm",
+                descRef: newDescRef
+              })
             ) : editingProduct ? (
-              <ProductForm
-                form={editingProduct} setForm={setEditingProduct}
-                onSubmit={saveEdit} submitLabel="Lưu thay đổi"
-                descRef={editDescRef}
-              />
+              renderProductForm({
+                form: editingProduct, setForm: setEditingProduct,
+                onSubmit: saveEdit, submitLabel: "Lưu thay đổi",
+                descRef: editDescRef
+              })
             ) : (
               <div className="flex flex-col items-center justify-center h-full py-16 text-gray-600">
                 <Package className="w-12 h-12 mb-3" />
