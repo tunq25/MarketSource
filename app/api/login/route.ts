@@ -47,9 +47,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
+    // ✅ FIX: Tránh account enumeration — không tiết lộ "tài khoản tồn tại nhưng chưa set password"
     if (!user.password_hash) {
       return NextResponse.json(
-        { success: false, error: 'Tài khoản chưa được thiết lập mật khẩu' },
+        { success: false, error: 'Email hoặc mật khẩu không chính xác' },
         { status: 401 }
       );
     }

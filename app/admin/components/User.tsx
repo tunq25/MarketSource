@@ -16,28 +16,10 @@ interface UserProps {
   updateUserBalance: (userId: string, newBalance: number) => void;
 }
 
-// Helper function để check sync status
+// ✅ FIX: Xóa localStorage logic — chỉ dùng API state từ server
 function getSyncStatus(user: any): 'synced' | 'desynced' | 'unknown' {
-  // Check nếu có syncStatus từ Firestore
   if (user.syncStatus === 'synced') return 'synced';
   if (user.syncStatus === 'desynced') return 'desynced';
-
-  // Check localStorage
-  if (typeof window !== 'undefined') {
-    try {
-      const usersStr = localStorage.getItem('users') || '[]';
-      const users = JSON.parse(usersStr);
-      if (Array.isArray(users)) {
-        const localUser = users.find((u: any) => u.uid === user.uid);
-        if (localUser && localUser.lastActivity !== user.lastActivity) {
-          return 'desynced';
-        }
-      }
-    } catch (e) {
-      // Ignore parse errors
-    }
-  }
-
   return user.lastSync ? 'synced' : 'unknown';
 }
 

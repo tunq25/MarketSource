@@ -7,7 +7,12 @@ import { z } from 'zod'
 
 // User schemas
 export const emailSchema = z.string().email('Email không hợp lệ')
-export const passwordSchema = z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự')
+// ✅ FIX: Nâng password policy: min 8 ký tự, phải có số và chữ
+export const passwordSchema = z.string()
+  .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
+  .max(100, 'Mật khẩu không được quá 100 ký tự')
+  .regex(/[0-9]/, 'Mật khẩu phải chứa ít nhất 1 chữ số')
+  .regex(/[A-Za-z]/, 'Mật khẩu phải chứa ít nhất 1 chữ cái')
 
 export const loginSchema = z.object({
   email: emailSchema,
@@ -66,12 +71,13 @@ export const productSchema = z.object({
   detailedDescription: z.string().optional().nullable(),
   price: z.coerce.number().min(0, 'Giá không được âm'),
   category: z.string().optional().nullable(),
-  demoUrl: z.string().optional().nullable(),
-  downloadUrl: z.string().optional().nullable(),
+  demoUrl: z.string().url('Demo URL không hợp lệ (cần bắt đầu bằng http/https)').optional().nullable(),
+  downloadUrl: z.string().url('Download URL không hợp lệ').optional().nullable(),
   tags: z.array(z.string()).optional().nullable(),
-  imageUrl: z.string().optional().nullable(),
-  imageUrls: z.array(z.string()).optional().nullable(),
+  imageUrl: z.string().url('Image URL không hợp lệ').optional().nullable(),
+  imageUrls: z.array(z.string().url()).optional().nullable(),
   isActive: z.boolean().optional(),
+  isFeatured: z.boolean().optional(),  // ✅ FIX: Thêm isFeatured field
 })
 
 export const updateProductSchema = z.object({
@@ -80,12 +86,13 @@ export const updateProductSchema = z.object({
   detailedDescription: z.string().optional().nullable(),
   price: z.coerce.number().min(0, 'Giá không được âm').optional(),
   category: z.string().optional().nullable(),
-  demoUrl: z.string().optional().nullable(),
-  downloadUrl: z.string().optional().nullable(),
+  demoUrl: z.string().url('Demo URL không hợp lệ').optional().nullable(),
+  downloadUrl: z.string().url('Download URL không hợp lệ').optional().nullable(),
   tags: z.array(z.string()).optional().nullable(),
-  imageUrl: z.string().optional().nullable(),
-  imageUrls: z.array(z.string()).optional().nullable(),
+  imageUrl: z.string().url('Image URL không hợp lệ').optional().nullable(),
+  imageUrls: z.array(z.string().url()).optional().nullable(),
   isActive: z.boolean().optional(),
+  isFeatured: z.boolean().optional(),  // ✅ FIX: Thêm isFeatured field
   averageRating: z.coerce.number().min(0).max(5).optional(),
   downloadCount: z.coerce.number().int().min(0).optional(),
 })

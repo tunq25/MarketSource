@@ -110,8 +110,11 @@ export async function PUT(
       demoUrl: productData.demoUrl ?? undefined,
       downloadUrl: productData.downloadUrl ?? undefined,
       imageUrl: productData.imageUrl ?? undefined,
+      imageUrls: productData.imageUrls ?? undefined,
+      detailedDescription: (productData as any).detailedDescription ?? undefined,
       tags: productData.tags ?? undefined,
       isActive: productData.isActive ?? undefined,
+      isFeatured: productData.isFeatured ?? undefined, // ✅ FIX: Thêm isFeatured
       averageRating: productData.averageRating ?? undefined,
       downloadCount: productData.downloadCount ?? undefined,
     });

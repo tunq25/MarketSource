@@ -1160,6 +1160,7 @@ export async function updateProductMySQL(
     detailedDescription?: string | null
     tags?: string[] | null
     isActive?: boolean
+    isFeatured?: boolean  // ✅ FIX: Thêm isFeatured field
     averageRating?: number
     downloadCount?: number
   }
@@ -1214,7 +1215,12 @@ export async function updateProductMySQL(
     }
     if (productData.isActive !== undefined) {
       updates.push("is_active = ?")
-      params.push(productData.isActive)
+      params.push(productData.isActive ? 1 : 0)
+    }
+    // ✅ FIX: isFeatured → is_featured column
+    if (productData.isFeatured !== undefined) {
+      updates.push("is_featured = ?")
+      params.push(productData.isFeatured ? 1 : 0)
     }
 
     // ✅ FIX: Cho phép admin manually set download_count
