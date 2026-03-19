@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       filters.category = category;
     }
 
-    if (isActive !== null) {
+    if (isActive !== null && isActive !== undefined) {
       filters.isActive = isActive === 'true';
     }
 

@@ -3,6 +3,7 @@ import { verifyFirebaseToken, requireAdmin } from "@/lib/api-auth"
 import { query } from "@/lib/database-mysql"
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
     try {

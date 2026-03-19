@@ -235,6 +235,19 @@ export async function PUT(request: NextRequest): Promise<Response> {
         newBalance: result.newBalance,
       });
 
+      // ✅ FIX: Tạo notification cho user khi deposit được approve
+      try {
+        const { createNotification } = await import('@/lib/database-mysql');
+        await createNotification({
+          userId: Number(deposit.user_id),
+          type: 'deposit_approved',
+          message: `Yêu cầu nạp tiền ${Number(deposit.amount).toLocaleString('vi-VN')}đ đã được duyệt. Số dư: ${result.newBalance.toLocaleString('vi-VN')}đ`,
+          isRead: false,
+        });
+      } catch (notifErr) {
+        logger.warn('Failed to create deposit notification', { error: notifErr });
+      }
+
       return NextResponse.json({
         success: true,
         message: 'Deposit approved and balance updated',

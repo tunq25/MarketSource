@@ -785,7 +785,7 @@ export async function updateWithdrawalStatusMySQL(
 export async function getPurchasesMySQL(userId?: number) {
   try {
     let sql = `
-      SELECT p.*, pr.title AS product_title, pr.price, u.email, u.username
+      SELECT p.*, pr.title AS product_title, pr.price, pr.download_url, pr.demo_url, pr.description, pr.category, pr.image_url, u.email, u.username
       FROM purchases p
       LEFT JOIN products pr ON p.product_id = pr.id
       LEFT JOIN users u ON p.user_id = u.id
@@ -1395,6 +1395,7 @@ export async function trackDownloadMySQL(downloadData: {
 export async function createNotificationMySQL(notificationData: {
   userId: number
   type: string
+  title?: string | null
   message: string
   isRead?: boolean
 }) {
@@ -1403,14 +1404,26 @@ export async function createNotificationMySQL(notificationData: {
 
     if (usePostgresBridge) {
       const result = await query(
-        "INSERT INTO notifications (user_id, type, message, is_read, created_at) VALUES (?, ?, ?, ?, NOW()) RETURNING id",
-        [notificationData.userId, notificationData.type, notificationData.message, notificationData.isRead || false]
+        "INSERT INTO notifications (user_id, type, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, NOW()) RETURNING id",
+        [
+          notificationData.userId, 
+          notificationData.type, 
+          notificationData.title || null,
+          notificationData.message, 
+          notificationData.isRead || false
+        ]
       )
       insertId = result[0]?.id;
     } else {
       const [result]: any = await getPool().execute(
-        "INSERT INTO notifications (user_id, type, message, is_read, created_at) VALUES (?, ?, ?, ?, NOW())",
-        [notificationData.userId, notificationData.type, notificationData.message, notificationData.isRead || false]
+        "INSERT INTO notifications (user_id, type, title, message, is_read, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+        [
+          notificationData.userId, 
+          notificationData.type, 
+          notificationData.title || null,
+          notificationData.message, 
+          notificationData.isRead || false
+        ]
       )
       insertId = result.insertId;
     }
@@ -1474,10 +1487,10 @@ export async function getChatsMySQL(
 ) {
   try {
     let sql = `SELECT c.*, 
-               u.username as user_name,
+               COALESCE(u.name, u.username) as user_name,
                u.email as user_email,
                u.avatar_url as user_avatar,
-               COALESCE(a.username, 'Admin') as admin_name,
+               COALESCE(a.name, a.username, 'Admin') as admin_name,
                COALESCE(a.email, '') as admin_email,
                c.is_admin
         FROM chats c
@@ -1984,6 +1997,50 @@ export async function getReferralByCodeMySQL(referralCode: string) {
   }
 }
 
+export async function getReferrerByReferredIdMySQL(referredId: number) {
+  try {
+    return await queryOne<any>(
+      `SELECT referrer_id, commission_percent FROM referrals 
+       WHERE referred_id = ?`,
+      [referredId]
+    )
+  } catch (err) {
+    logger.error("MySQL: getReferrerByReferredId error", err, { referredId })
+    throw err
+  }
+}
+
+export async function processReferralCommissionMySQL(referredId: number, purchaseAmount: number) {
+  try {
+    const referral = await getReferrerByReferredIdMySQL(referredId)
+    if (!referral) return null
+
+    const commissionAmount = (purchaseAmount * parseFloat(referral.commission_percent)) / 100
+
+    return await withTransaction(async (conn) => {
+      // 1. Cộng tiền vào balance của referrer
+      await conn.execute(
+        "UPDATE users SET balance = balance + ?, updated_at = NOW() WHERE id = ?",
+        [commissionAmount, referral.referrer_id]
+      )
+
+      // 2. Cập nhật total_earnings trong bảng referrals
+      await conn.execute(
+        "UPDATE referrals SET total_earnings = total_earnings + ?, updated_at = NOW(), status = 'approved' WHERE referred_id = ?",
+        [commissionAmount, referredId]
+      )
+
+      return {
+        referrerId: referral.referrer_id,
+        commissionAmount,
+      }
+    })
+  } catch (err) {
+    logger.error("MySQL: processReferralCommission error", err, { referredId, purchaseAmount })
+    return null
+  }
+}
+
 // ===================== ANALYTICS =====================
 
 export async function trackAnalyticsEventMySQL(eventData: {
@@ -2327,6 +2384,8 @@ export {
   getReferralsMySQL as getReferrals,
   createReferralMySQL as createReferral,
   getReferralByCodeMySQL as getReferralByCode,
+  getReferrerByReferredIdMySQL as getReferrerByReferredId,
+  processReferralCommissionMySQL as processReferralCommission,
   // Analytics
   trackAnalyticsEventMySQL as trackAnalyticsEvent,
   getAnalyticsEventsMySQL as getAnalyticsEvents,

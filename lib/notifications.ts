@@ -228,6 +228,27 @@ export async function notifyPasswordResetRequest(payload: {
   await sendTelegramNotification(message);
 }
 
+/**
+ * Thông báo nhận được hoa hồng giới thiệu
+ */
+export async function notifyReferralCommission(payload: {
+  referrerEmail: string;
+  referrerName?: string;
+  amount: number;
+  referredEmail?: string;
+}) {
+  const message = `🎊 <b>HOA HỒNG GIỚI THIỆU MỚI</b>
+  
+👤 <b>Người nhận:</b> ${escapeHTML(payload.referrerName || payload.referrerEmail)}
+💰 <b>Số tiền:</b> ${payload.amount.toLocaleString('vi-VN')}đ
+👥 <b>Từ khách hàng:</b> ${escapeHTML(payload.referredEmail || 'Ẩn danh')}
+⏰ <b>Thời gian:</b> ${new Date().toLocaleString('vi-VN')}
+
+<i>Số dư đã được tự động cộng vào ví!</i>`;
+
+  await sendTelegramNotification(message);
+}
+
 // Aliases cho backward compatibility (nếu cần)
 export const sendDepositNotification = notifyDepositRequest;
 export const sendWithdrawalNotification = notifyWithdrawalRequest;

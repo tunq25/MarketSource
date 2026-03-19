@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
                     await createNotificationMySQL({
                         userId: user.id,
                         type: type || 'system',
+                        title: title || 'Thông báo hệ thống',
                         message: message,
                         isRead: false
                     })

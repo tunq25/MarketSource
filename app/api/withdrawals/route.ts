@@ -8,6 +8,7 @@ import { logger } from '@/lib/logger'
 import { getUserIdByEmail, getUserByIdMySQL, queryOne } from '@/lib/database-mysql'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest): Promise<Response> {
   try {
@@ -45,14 +46,24 @@ export async function GET(request: NextRequest): Promise<Response> {
       }
     }
 
-    // ✅ FIX: Nếu userId là string (uid), cần convert sang number (DB ID)
+    // ✅ SECURITY FIX: Nếu không phải admin, bắt buộc phải lọc theo userId của chính người dùng đó
+    // Đảm bảo user thường không thể xem withdrawals của người khác (IDOR protection)
     let dbUserId: number | undefined = undefined;
-    if (userId) {
-      if (isNaN(parseInt(userId))) {
-        // userId là string (uid), cần tìm DB ID
-        dbUserId = await getUserIdByEmail(authUser?.email || '') || undefined;
-      } else {
-        dbUserId = parseInt(userId);
+    if (isAdmin) {
+      // Admin có thể xem tất cả hoặc xem theo userId cụ thể nếu có param
+      if (userId) {
+        if (!isNaN(parseInt(userId))) {
+          dbUserId = parseInt(userId);
+        } else {
+          dbUserId = await getUserIdByEmail(userId) || undefined;
+        }
+      }
+    } else if (authUser) {
+      // User thường: Luôn chỉ lấy withdrawals của chính mình
+      dbUserId = await getUserIdByEmail(authUser.email || '') || undefined;
+
+      if (!dbUserId) {
+        return NextResponse.json({ success: false, error: 'User profile not found' }, { status: 404 });
       }
     }
 
@@ -73,6 +84,10 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
+    // ✅ FIX: Thêm rate limiting cho withdrawal POST (tránh spam withdrawals)
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 5, 60, 'withdrawals-post');
+    if (rateLimitResponse) return rateLimitResponse;
+
     // Require authentication
     const authUser = await verifyFirebaseToken(request);
     if (!authUser) {

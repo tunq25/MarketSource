@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
     password = body.password;
     name = body.name;
     username = body.username;
+    const referralCode = body.referralCode; // ✅ FIX: Receive referralCode from frontend
     const captchaToken = body.captchaToken;
 
     // ✅ PoW Captcha verification
@@ -140,6 +141,23 @@ export async function POST(request: NextRequest) {
       }).catch(() => { }); // Fire and forget
     } catch (e) {
       // Silent fail - không block registration flow
+    }
+
+    // ✅ FIX: Xử lý Referral Code nếu có
+    if (referralCode && result.id) {
+      try {
+        const { getReferralByCodeMySQL, createReferralMySQL } = await import('@/lib/database-mysql');
+        const referrer = await getReferralByCodeMySQL(referralCode);
+        
+        if (referrer && referrer.id !== result.id) {
+          await createReferralMySQL(referrer.id, result.id);
+          const { logger } = await import('@/lib/logger');
+          logger.info('Referral linked successfully', { referrerId: referrer.id, referredId: result.id });
+        }
+      } catch (refError) {
+        const { logger } = await import('@/lib/logger');
+        logger.error('Failed to link referral', refError);
+      }
     }
 
     return NextResponse.json({

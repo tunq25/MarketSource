@@ -6,6 +6,7 @@ import { updateProductSchema } from '@/lib/validation-schemas';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/products/[id]

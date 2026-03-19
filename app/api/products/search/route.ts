@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs'
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
 const searchSchema = z.object({
   query: z.string().min(1).max(200),
@@ -27,12 +27,12 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    
+
     const query = searchParams.get('q') || searchParams.get('query') || '';
     if (!query) {
       return NextResponse.json({ success: false, error: 'Search query required' }, { status: 400 });
     }
-    
+
     // ✅ FIX: Validate query length để tránh DoS
     if (query.length > 200) {
       return NextResponse.json({ success: false, error: 'Search query too long (max 200 characters)' }, { status: 400 });
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     }
 
     const products = await searchProducts(query, validation.data);
-    
+
     return NextResponse.json({
       success: true,
       products,

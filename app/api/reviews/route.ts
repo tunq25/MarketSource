@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const reviewSchema = z.object({
   productId: z.number().int().positive(),

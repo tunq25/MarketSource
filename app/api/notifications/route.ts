@@ -4,6 +4,7 @@ import { verifyFirebaseToken, requireAdmin } from "@/lib/api-auth"
 import { getUserIdByEmail } from "@/lib/database-mysql"
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // ✅ FIX: Migrate từ mysql.ts sang PostgreSQL
 export async function POST(request: NextRequest) {

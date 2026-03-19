@@ -3,6 +3,7 @@ import { verifyFirebaseToken } from "@/lib/api-auth"
 import { getUserIdByEmail, query, queryOne } from "@/lib/database-mysql"
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // PUT: Update notification (mark as read/unread)
 export async function PUT(

@@ -106,8 +106,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ✅ FIX: Lấy user data đầy đủ từ database để trả về balance
-    const { getUserById } = await import('@/lib/database');
+    // ✅ FIX: Lấy user data đầy đủ từ database để trả về balance (Using consistent library)
+    const { getUserByIdMySQL: getUserById } = await import('@/lib/database-mysql');
     const fullUser = await getUserById(result.id);
     
     return NextResponse.json({

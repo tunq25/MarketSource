@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getPurchases, createPurchase, getProductById, getUserIdByEmail, normalizeUserIdMySQL } from "@/lib/database-mysql"
+import { getPurchases, createPurchase, getProductById, getUserIdByEmail, normalizeUserIdMySQL, processReferralCommissionMySQL } from "@/lib/database-mysql"
 import { verifyFirebaseToken, validateRequest } from "@/lib/api-auth"
 import { purchaseSchema } from "@/lib/validation-schemas"
-import { notifyPurchaseSuccess } from "@/lib/notifications"
+import { notifyPurchaseSuccess, notifyReferralCommission } from "@/lib/notifications"
 import { logger } from "@/lib/logger"
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
@@ -173,6 +174,36 @@ export async function POST(request: NextRequest) {
       userEmail: authUser.email || undefined
     });
 
+    // ✅ FIX: Xử lý hoa hồng giới thiệu (Referral Commission)
+    try {
+      const commissionResult = await processReferralCommissionMySQL(dbUserId, purchaseData.amount);
+      if (commissionResult) {
+        // Lấy thông tin người giới thiệu để gửi thông báo chi tiết
+        const { getUserByIdMySQL } = await import('@/lib/database-mysql');
+        const referrer = await getUserByIdMySQL(commissionResult.referrerId);
+        
+        await notifyReferralCommission({
+          referrerEmail: referrer?.email || 'Admin',
+          referrerName: referrer?.username || referrer?.name,
+          amount: commissionResult.commissionAmount,
+          referredEmail: authUser.email || undefined
+        });
+
+        // Tạo thông báo trong DB cho người giới thiệu
+        const { createNotificationMySQL } = await import('@/lib/database-mysql');
+        await createNotificationMySQL({
+          userId: commissionResult.referrerId,
+          type: 'referral',
+          message: `Bạn vừa nhận được ${commissionResult.commissionAmount.toLocaleString()}đ hoa hồng từ một giao dịch của người bạn giới thiệu!`,
+          isRead: false
+        });
+        
+        logger.info('Referral commission processed', { ...commissionResult, referredId: dbUserId });
+      }
+    } catch (refError) {
+      logger.error('Failed to process referral commission', refError);
+    }
+
     const product = await getProductById(productIdNum);
     notifyPurchaseSuccess({
       userName: authUser.email?.split('@')[0],
@@ -182,6 +213,19 @@ export async function POST(request: NextRequest) {
     }).catch((error) => {
       logger.warn('Failed to notify purchase success', { error: error?.message });
     });
+
+    // ✅ Gửi tin nhắn qua hệ thống Chat nội bộ của Dashboard
+    try {
+      const { createChat } = await import('@/lib/database-mysql');
+      await createChat({
+        userId: dbUserId,
+        adminId: null, // Tin nhắn tự động từ hệ thống
+        message: `🤖 Chúc mừng bạn đã mua thành công sản phẩm "${product?.title || `Sản phẩm #${productIdNum}`}". Bạn có thể tải mã nguồn cập nhật mới nhất tại mục "Tải xuống" hoặc "Sản phẩm đã mua" trong Dashboard. Cảm ơn bạn đã tin tưởng Hệ Thống QtusDev Market! 🎉`,
+        isAdmin: true, // Flag xác định bot account
+      });
+    } catch (chatError: any) {
+      logger.error('Failed to send purchase chat notification', { error: chatError.message });
+    }
 
     // ✅ Gửi mail cám ơn mua hàng thành công
     if (authUser.email) {

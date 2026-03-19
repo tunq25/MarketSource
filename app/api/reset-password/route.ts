@@ -13,11 +13,16 @@ export const runtime = "nodejs"
 const resetSchema = z.object({
   email: z.string().email('Email không hợp lệ'),
   otp: z.string().length(6, 'Mã OTP phải có 6 chữ số'),
-  password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự').max(128),
+  password: z.string().min(6, 'Mật khẩu phải có nhất 6 ký tự').max(128),
 });
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ BUG #11 FIX: Rate limiting cho OTP verification (5 attempts / 15 mins)
+    const { checkRateLimitAndRespond } = await import('@/lib/rate-limit');
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 5, 900, 'reset-password-verify');
+    if (rateLimitResponse) return rateLimitResponse;
+
     const body = await request.json();
     const validation = resetSchema.safeParse(body);
 

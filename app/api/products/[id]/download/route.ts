@@ -5,6 +5,7 @@ import { checkRateLimitAndRespond } from '@/lib/rate-limit';
 import { getUserIdByEmail } from '@/lib/database-mysql';
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/products/[id]/download

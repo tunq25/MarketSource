@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
             is_trusted,
             created_at
           FROM user_sessions
-          WHERE user_id = $1
+          WHERE user_id = ?
           ORDER BY last_activity DESC
           LIMIT 20
         `, [dbUserId])

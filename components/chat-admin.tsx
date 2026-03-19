@@ -299,9 +299,9 @@ export function ChatAdmin() {
                         <div key={msg.id} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
                           <div className={`flex flex-col max-w-[85%] ${isMe ? 'items-end' : 'items-start'}`}>
                             <div className="flex items-center gap-1.5 mb-1 px-1">
-                              {!isMe && <span className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Khách</span>}
+                              {!isMe && <span className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">{msg.user_name || msg.user_email || 'Khách'}</span>}
                               {isAI && <Bot className="w-3 h-3 text-purple-400" />}
-                              {isMe && !isAI && <span className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Bạn</span>}
+                              {isMe && !isAI && <span className="text-[10px] font-bold opacity-40 uppercase tracking-tighter">Bạn (Admin)</span>}
                             </div>
                             <div className={`p-3 rounded-2xl text-sm shadow-sm ${isMe
                               ? 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-tr-none'

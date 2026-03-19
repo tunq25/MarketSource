@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
+import { verifyFirebaseToken } from "@/lib/api-auth"
 import { disableUserTwoFactor, getUserByEmail } from "@/lib/database-mysql"
 import { logger } from "@/lib/logger"
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ BUG #12 FIX: Check authentication
+    const authUser = await verifyFirebaseToken(request);
+    if (!authUser) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const { email } = await request.json()
+    if (!email || email.toLowerCase() !== authUser.email?.toLowerCase()) {
+      return NextResponse.json({ success: false, error: "Email không khớp với tài khoản đăng nhập" }, { status: 403 })
+    }
     if (!email) {
       return NextResponse.json({ success: false, error: "Thiếu email" }, { status: 400 })
     }

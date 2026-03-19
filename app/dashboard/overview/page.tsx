@@ -23,6 +23,8 @@ import { ReferralProgram } from "../components/ReferralProgram"
 import type { ReferralStat } from "../components/ReferralProgram"
 import { CouponsCenter } from "../components/CouponsCenter"
 import { DeviceManagement } from "../components/DeviceManagement"
+import { ProfileSection } from "../components/ProfileSection"
+import { SecuritySection } from "../components/SecuritySection"
 import { ReviewManager } from "../components/ReviewManager"
 import { Logo } from "@/components/logo"
 import { FloatingHeader } from "@/components/floating-header"
@@ -113,6 +115,61 @@ export default function DashboardPage() {
   const [isStartingTwoFactor, setIsStartingTwoFactor] = useState(false)
   const [isVerifyingTwoFactor, setIsVerifyingTwoFactor] = useState(false)
   const [isDisablingTwoFactor, setIsDisablingTwoFactor] = useState(false)
+
+  // Device Session Handlers
+  const fetchDeviceSessions = useCallback(async () => {
+    if (!currentUser?.email) return
+    try {
+      const result = await apiGet(`/api/sessions?email=${encodeURIComponent(currentUser.email)}`)
+      if (result?.sessions) {
+        setDeviceSessions(result.sessions)
+      }
+    } catch (error) {
+      logger.error("Error fetching device sessions", error)
+    }
+  }, [currentUser?.email])
+
+  const revokeSession = async (sessionId: string) => {
+    try {
+      const { apiDelete } = await import('@/lib/api-client')
+      const result = await apiDelete(`/api/sessions/${sessionId}`)
+      if (result.success) {
+        setDeviceSessions(prev => prev.filter(s => String(s.id) !== sessionId))
+        setProfileMessage({ type: "success", text: "Thiết bị đã được đăng xuất" })
+      }
+    } catch (error) {
+      logger.error("Error revoking session", error)
+      setProfileMessage({ type: "error", text: "Không thể đăng xuất thiết bị" })
+    }
+  }
+
+  const markTrusted = async (sessionId: string) => {
+    try {
+      const { apiPut } = await import('@/lib/api-client')
+      const result = await apiPut(`/api/sessions/${sessionId}/trust`, {})
+      if (result.success) {
+        setDeviceSessions(prev => prev.map(s => String(s.id) === sessionId ? { ...s, isTrusted: true } : s))
+        setProfileMessage({ type: "success", text: "Thiết bị đã được đánh dấu tin cậy" })
+      }
+    } catch (error) {
+      logger.error("Error marking session as trusted", error)
+      setProfileMessage({ type: "error", text: "Không thể cập nhật trạng thái thiết bị" })
+    }
+  }
+
+  const handleTwoFactorToggle = () => {
+    if (securityPreferences.twoFactorEnabled) {
+      disableTwoFactor()
+    } else {
+      startTwoFactorSetup()
+    }
+  }
+
+  useEffect(() => {
+    if (currentUser?.email) {
+      fetchDeviceSessions()
+    }
+  }, [currentUser?.email, fetchDeviceSessions])
 
   const normalizeRole = (role?: string | null): User["role"] => {
     if (role === "admin" || role === "superadmin" || role === "user") {
@@ -445,7 +502,7 @@ export default function DashboardPage() {
         type: "purchase" as const,
         time: p.purchaseDate,
         title: `Mua ${p.title}`,
-        amount: p.amount || p.price || 0,
+        amount: Number(p.amount || p.price || 0),
         meta: p.category,
       })),
       ...depositHistory.map((d) => ({
@@ -453,7 +510,7 @@ export default function DashboardPage() {
         type: "deposit" as const,
         time: d.approvedTime || d.timestamp,
         title: `Nạp ${Number(d.amount || 0).toLocaleString("vi-VN")}đ qua ${d.method}`,
-        amount: d.amount,
+        amount: Number(d.amount || 0),
         meta: d.transactionId,
       })),
       ...withdrawHistory.map((w) => ({
@@ -461,7 +518,7 @@ export default function DashboardPage() {
         type: "withdraw" as const,
         time: w.approvedTime || w.requestTime,
         title: `Rút ${Number(w.amount || 0).toLocaleString("vi-VN")}đ`,
-        amount: w.amount,
+        amount: Number(w.amount || 0),
         meta: w.bankName,
       })),
     ].filter((item) => !!item.time)
@@ -777,23 +834,6 @@ export default function DashboardPage() {
     }
   }, [handleReferralCopy])
 
-  const handleRevokeSession = useCallback((sessionId: string) => {
-    setDeviceSessions((prev) => {
-      const updated = prev.filter((session) => session.id !== sessionId)
-      setLocalStorage("userSessions", updated)
-      return updated
-    })
-  }, [])
-
-  const handleMarkTrusted = useCallback((sessionId: string) => {
-    setDeviceSessions((prev) => {
-      const updated = prev.map((session) =>
-        session.id === sessionId ? { ...session, isTrusted: true } : session
-      )
-      setLocalStorage("userSessions", updated)
-      return updated
-    })
-  }, [])
 
   // Handle NextAuth session - save to localStorage if exists
   useEffect(() => {
@@ -999,24 +1039,29 @@ export default function DashboardPage() {
               );
 
               // Map format để tương thích với UI
-              const mappedPurchases = userPurchasesList.map((p: any) => ({
-                id: p.id || p.product_id,
-                productId: p.product_id,
-                userId: p.user_id,
-                userEmail: p.userEmail || p.user_email,
-                title: p.product_title || 'Sản phẩm',
-                description: p.description || '',
-                price: p.amount,
-                amount: p.amount,
-                purchaseDate: p.created_at || new Date().toISOString(),
-                category: p.category || 'Uncategorized',
-                image: p.image_url || '/placeholder.svg',
-                downloadLink: p.download_url || null,
-                demoLink: p.demo_url || null,
-                downloads: 0,
-                rating: 0,
-                reviewCount: 0
-              }));
+              const localPurchases = getLocalStorage<any[]>("userPurchases", []);
+              const mappedPurchases = userPurchasesList.map((p: any) => {
+                const id = p.id || p.product_id;
+                const localP = localPurchases.find(lp => lp.id === id) || {};
+                return {
+                  id: id,
+                  productId: p.product_id,
+                  userId: p.user_id,
+                  userEmail: p.userEmail || p.user_email,
+                  title: p.product_title || 'Sản phẩm',
+                  description: p.description || '',
+                  price: typeof p.price !== 'undefined' ? p.price : p.amount,
+                  amount: p.amount,
+                  purchaseDate: p.created_at || new Date().toISOString(),
+                  category: p.category || 'Uncategorized',
+                  image: p.image_url || p.imageUrl || '/placeholder.svg',
+                  downloadLink: p.download_url || null,
+                  demoLink: p.demo_url || null,
+                  downloads: localP.downloads || 0,
+                  rating: localP.rating || 0,
+                  reviewCount: localP.reviewCount || 0
+                };
+              });
 
               setUserPurchases(mappedPurchases);
               logger.debug('User purchases loaded from API', { count: mappedPurchases.length });
@@ -1183,9 +1228,9 @@ export default function DashboardPage() {
     };
 
     loadUser();
-  }, [router, userIP, deviceInfo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [router]); // ✅ FIX: Chỉ depend vào router - userIP/deviceInfo được đọc qua ref để tránh re-run thừa
 
-  // Load persisted wishlist, tickets, security preferences khi đã có user
+  // Load persisted wishlist, tickets (từ API), security preferences khi đã có user
   useEffect(() => {
     if (!currentUser?.uid) return
     try {
@@ -1193,12 +1238,6 @@ export default function DashboardPage() {
       const savedWishlist = getLocalStorage<string[]>(wishlistKey, [])
       if (savedWishlist.length > 0) {
         setWishlistIds(savedWishlist)
-      }
-
-      const ticketsKey = `supportTickets_${currentUser.uid}`
-      const savedTickets = getLocalStorage<SupportTicket[]>(ticketsKey, [])
-      if (savedTickets.length > 0) {
-        setSupportTickets(savedTickets)
       }
 
       const securityKey = `securityPrefs_${currentUser.uid}`
@@ -1214,6 +1253,27 @@ export default function DashboardPage() {
     } catch (error) {
       logger.error('Error loading user preferences', error)
     }
+
+    // ✅ FIX: Load tickets từ API thay vì chỉ localStorage
+    const fetchTickets = async () => {
+      try {
+        const result = await apiGet('/api/support-tickets')
+        if (result?.tickets && result.tickets.length > 0) {
+          setSupportTickets(result.tickets)
+          return
+        }
+      } catch {
+        logger.warn('Tickets API unavailable, using localStorage fallback')
+      }
+      // Fallback: localStorage
+      try {
+        const saved = getLocalStorage<SupportTicket[]>(`supportTickets_${currentUser!.uid}`, [])
+        if (saved.length > 0) setSupportTickets(saved)
+      } catch {
+        // silent
+      }
+    }
+    fetchTickets()
   }, [currentUser?.uid])
 
   // Persist wishlist
@@ -1329,24 +1389,29 @@ export default function DashboardPage() {
               purchase.userEmail === userEmail || purchase.user_email === userEmail
             );
 
-            const mappedPurchases = userPurchasesList.map((p: any) => ({
-              id: p.id || p.product_id,
-              productId: p.product_id,
-              userId: p.user_id,
-              userEmail: p.userEmail || p.user_email,
-              title: p.product_title || 'Sản phẩm',
-              description: p.description || '',
-              price: p.amount,
-              amount: p.amount,
-              purchaseDate: p.created_at || new Date().toISOString(),
-              category: p.category || 'Uncategorized',
-              image: p.image_url || '/placeholder.svg',
-              downloadLink: p.download_url || null,
-              demoLink: p.demo_url || null,
-              downloads: 0,
-              rating: 0,
-              reviewCount: 0
-            }));
+            const localPurchases = getLocalStorage<any[]>("userPurchases", []);
+            const mappedPurchases = userPurchasesList.map((p: any) => {
+              const id = p.id || p.product_id;
+              const localP = localPurchases.find(lp => lp.id === id) || {};
+              return {
+                id: id,
+                productId: p.product_id,
+                userId: p.user_id,
+                userEmail: p.userEmail || p.user_email,
+                title: p.product_title || 'Sản phẩm',
+                description: p.description || '',
+                price: typeof p.price !== 'undefined' ? p.price : p.amount,
+                amount: p.amount,
+                purchaseDate: p.created_at || new Date().toISOString(),
+                category: p.category || 'Uncategorized',
+                image: p.image_url || p.imageUrl || '/placeholder.svg',
+                downloadLink: p.download_url || null,
+                demoLink: p.demo_url || null,
+                downloads: localP.downloads || 0,
+                rating: localP.rating || 0,
+                reviewCount: localP.reviewCount || 0
+              };
+            });
 
             if (!abortController.signal.aborted) {
               setUserPurchases(mappedPurchases);
@@ -1535,12 +1600,12 @@ export default function DashboardPage() {
     )
   }
 
-  const handleTicketSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleTicketSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!ticketForm.subject || !ticketForm.message || !currentUser) return
 
-    const newTicket: SupportTicket = {
-      id: Date.now().toString(),
+    const optimisticTicket: SupportTicket = {
+      id: `local-${Date.now()}`,
       userId: typeof currentUser.id === 'number' ? currentUser.id : String(currentUser.id),
       subject: ticketForm.subject,
       category: ticketForm.category as 'product' | 'payment' | 'technical' | 'account' | 'other',
@@ -1550,16 +1615,47 @@ export default function DashboardPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
-    setSupportTickets((prev) => [newTicket, ...prev])
+
+    // Optimistic UI update
+    setSupportTickets((prev) => [optimisticTicket, ...prev])
     setTicketForm({ subject: "", category: "product", priority: "medium", message: "" })
+
+    // Persist lên server
+    try {
+      const { apiPost } = await import('@/lib/api-client')
+      const result = await apiPost('/api/support-tickets', {
+        subject: ticketForm.subject,
+        category: ticketForm.category,
+        priority: ticketForm.priority,
+        message: ticketForm.message,
+      })
+      if (result?.ticket) {
+        // Thay thế optimistic ticket bằng ticket thật từ server (ID chính xác)
+        setSupportTickets((prev) =>
+          prev.map((t) => t.id === optimisticTicket.id ? { ...result.ticket } : t)
+        )
+      }
+    } catch (error) {
+      logger.warn('Ticket API failed, ticket saved locally only', { error })
+    }
   }
 
-  const updateTicketStatus = (ticketId: string, status: string) => {
+  const updateTicketStatus = async (ticketId: string, status: string) => {
+    // ✅ FIX: Optimistic update + persist to API
     setSupportTickets((prev) =>
       prev.map((ticket) =>
         ticket.id === ticketId ? { ...ticket, status, updatedAt: new Date().toISOString() } : ticket
       )
     )
+    // Persist lên server (bỏ qua local-only tickets)
+    if (!String(ticketId).startsWith('local-')) {
+      try {
+        const { apiPut } = await import('@/lib/api-client')
+        await apiPut(`/api/support-tickets`, { ticketId, status })
+      } catch (error) {
+        logger.warn('Failed to update ticket status on server', { error, ticketId, status })
+      }
+    }
   }
 
   const exportActivityLog = () => {
@@ -1748,7 +1844,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-purple-600">
-                  {userPurchases.reduce((sum, purchase) => sum + (purchase.downloads || 0), 0)}
+                  {downloadRecords.reduce((sum, record) => sum + (record.totalDownloads || 0), 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Tổng số lượt tải xuống
@@ -1780,7 +1876,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                     <p className="text-2xl font-bold text-purple-600">
-                      {userPurchases.reduce((sum, purchase) => sum + (purchase.downloads || 0), 0)}
+                      {downloadRecords.reduce((sum, record) => sum + (record.totalDownloads || 0), 0)}
                     </p>
                     <p className="text-xs text-muted-foreground">Tổng số lượt tải xuống</p>
                   </div>
@@ -1882,7 +1978,7 @@ export default function DashboardPage() {
                           type: "purchase" as const,
                           time: p.purchaseDate,
                           label: `Mua "${p.title}"`,
-                          amount: p.amount || p.price || 0,
+                          amount: Number(p.amount || p.price || 0),
                         })),
                         ...depositHistory.map((d: any) => ({
                           type: "deposit" as const,
@@ -1890,7 +1986,7 @@ export default function DashboardPage() {
                           label: `Nạp ${Number(d.amount || 0).toLocaleString(
                             "vi-VN"
                           )}đ qua ${d.method}`,
-                          amount: d.amount,
+                          amount: Number(d.amount || 0),
                         })),
                         ...withdrawHistory.map((w: any) => ({
                           type: "withdraw" as const,
@@ -1898,7 +1994,7 @@ export default function DashboardPage() {
                           label: `Rút ${Number(w.amount || 0).toLocaleString(
                             "vi-VN"
                           )}đ về ${w.bankName}`,
-                          amount: w.amount,
+                          amount: Number(w.amount || 0),
                         })),
                       ]
                         .filter((item) => !!item.time)
@@ -2302,8 +2398,8 @@ export default function DashboardPage() {
                   id: String(s.id),
                   lastActivity: typeof s.lastActivity === 'string' ? s.lastActivity : (s.lastActivity instanceof Date ? s.lastActivity.toISOString() : new Date().toISOString())
                 }))}
-                onRevoke={handleRevokeSession}
-                onMarkTrusted={handleMarkTrusted}
+                onRevoke={revokeSession}
+                onMarkTrusted={markTrusted}
               />
             </TabsContent>
 
@@ -2317,7 +2413,7 @@ export default function DashboardPage() {
                   category: p.category
                 }))}
                 wishlistCount={wishlistProducts.length}
-                totalDownloads={userPurchases.reduce((sum, purchase) => sum + (purchase.downloads || 0), 0)}
+                totalDownloads={downloadRecords.reduce((sum, record) => sum + (record.totalDownloads || 0), 0)}
                 onExport={handleAnalyticsExport}
               />
             </TabsContent>
@@ -2533,7 +2629,7 @@ export default function DashboardPage() {
                         <div key={withdrawal.id} className="flex items-center justify-between p-4 border rounded-lg">
                           <div>
                             <p className="font-semibold text-red-600">
-                              -{withdrawal.amount.toLocaleString('vi-VN')}đ
+                              -{Number(withdrawal.amount || 0).toLocaleString('vi-VN')}đ
                             </p>
                             <p className="text-sm text-muted-foreground">
                               {withdrawal.bankName}
@@ -2684,6 +2780,7 @@ export default function DashboardPage() {
                           >
                             <option value="product">Sản phẩm</option>
                             <option value="payment">Thanh toán</option>
+                            <option value="technical">Kỹ thuật</option>
                             <option value="account">Tài khoản</option>
                             <option value="other">Khác</option>
                           </select>
@@ -2702,6 +2799,7 @@ export default function DashboardPage() {
                             <option value="low">Thấp</option>
                             <option value="medium">Trung bình</option>
                             <option value="high">Cao</option>
+                            <option value="urgent">Khẩn cấp</option>
                           </select>
                         </div>
                       </div>
@@ -2761,14 +2859,16 @@ export default function DashboardPage() {
                               <Badge variant="secondary">{ticket.category}</Badge>
                               <Badge
                                 className={
-                                  ticket.priority === "high"
+                                  ticket.priority === "urgent"
+                                    ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                                    : ticket.priority === "high"
                                     ? "bg-red-100 text-red-800"
                                     : ticket.priority === "medium"
                                       ? "bg-yellow-100 text-yellow-800"
                                       : "bg-blue-100 text-blue-800"
                                 }
                               >
-                                Ưu tiên: {ticket.priority}
+                                Ưu tiên: {ticket.priority === "urgent" ? "Khẩn cấp" : ticket.priority === "high" ? "Cao" : ticket.priority === "medium" ? "TB" : "Thấp"}
                               </Badge>
                             </div>
                           </div>
@@ -2780,389 +2880,44 @@ export default function DashboardPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="profile" className="space-y-4 mt-6 animate-fade-in-up">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card className="liquid-glass-card border-border/50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <UserIcon className="w-5 h-5 mr-2" />
-                      Thông tin cá nhân
-                    </CardTitle>
-                    <CardDescription>Cập nhật avatar, thông tin liên hệ và mạng xã hội.</CardDescription>
-                    {profileMessage && (
-                      <p
-                        className={`text-sm ${profileMessage.type === "success" ? "text-green-600" : "text-red-600"
-                          }`}
-                      >
-                        {profileMessage.text}
-                      </p>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    <form className="space-y-6" onSubmit={handleProfileSubmit}>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                        <div className="flex items-center gap-4">
-                          <Avatar className="h-20 w-20 border">
-                            <AvatarImage
-                              src={avatarPreview || currentUser.avatarUrl || currentUser.image || ""}
-                              alt={currentUser.name || currentUser.email}
-                            />
-                            <AvatarFallback>
-                              {(currentUser.name || currentUser.email || "U").slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => avatarInputRef.current?.click()}
-                            >
-                              <Camera className="w-4 h-4 mr-2" />
-                              Đổi avatar
-                            </Button>
-                            <p className="text-xs text-muted-foreground mt-2">
-                              Hỗ trợ PNG/JPG, dung lượng &lt; 2MB
-                            </p>
-                          </div>
-                        </div>
-                        <input
-                          ref={avatarInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleAvatarChange}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="profile-name">Tên hiển thị</Label>
-                          <Input
-                            id="profile-name"
-                            value={profileForm.name}
-                            onChange={(e) => handleProfileInputChange("name", e.target.value)}
-                            placeholder="Tên hiển thị"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="profile-phone">Số điện thoại</Label>
-                          <Input
-                            id="profile-phone"
-                            value={profileForm.phone}
-                            onChange={(e) => handleProfileInputChange("phone", e.target.value)}
-                            placeholder="+84..."
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <Label htmlFor="profile-address">Địa chỉ</Label>
-                          <Input
-                            id="profile-address"
-                            value={profileForm.address}
-                            onChange={(e) => handleProfileInputChange("address", e.target.value)}
-                            placeholder="Số nhà, đường, phường..."
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="profile-city">Thành phố</Label>
-                          <Input
-                            id="profile-city"
-                            value={profileForm.city}
-                            onChange={(e) => handleProfileInputChange("city", e.target.value)}
-                            placeholder="TP. Hồ Chí Minh"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="profile-country">Quốc gia</Label>
-                          <Input
-                            id="profile-country"
-                            value={profileForm.country}
-                            onChange={(e) => handleProfileInputChange("country", e.target.value)}
-                            placeholder="Việt Nam"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <Label htmlFor="social-google">Google</Label>
-                          <Input
-                            id="social-google"
-                            value={profileForm.socialGoogle}
-                            onChange={(e) => handleProfileInputChange("socialGoogle", e.target.value)}
-                            placeholder="https://profiles.google.com/..."
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="social-github">GitHub</Label>
-                          <Input
-                            id="social-github"
-                            value={profileForm.socialGithub}
-                            onChange={(e) => handleProfileInputChange("socialGithub", e.target.value)}
-                            placeholder="https://github.com/..."
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="social-facebook">Facebook</Label>
-                          <Input
-                            id="social-facebook"
-                            value={profileForm.socialFacebook}
-                            onChange={(e) => handleProfileInputChange("socialFacebook", e.target.value)}
-                            placeholder="https://facebook.com/..."
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <Button type="submit" disabled={isSavingProfile} className="w-full sm:w-auto">
-                          {isSavingProfile ? "Đang lưu..." : "Lưu thay đổi"}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => router.push("/dashboard/change-password")}
-                        >
-                          <Lock className="w-4 h-4 mr-2" />
-                          Đổi mật khẩu
-                        </Button>
-                      </div>
-                    </form>
-                  </CardContent>
-                </Card>
-
-                <Card className="liquid-glass-card border-border/50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Settings className="w-5 h-5 mr-2" />
-                      Thông tin & thống kê tài khoản
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Email</span>
-                      <span className="font-medium text-right break-all">{currentUser.email}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Ngày tham gia</span>
-                      <span className="font-medium">
-                        {currentUser.created_at ? (typeof currentUser.created_at === 'string' || currentUser.created_at instanceof Date ? new Date(currentUser.created_at).toLocaleDateString("vi-VN") : 'N/A') : 'N/A'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Lần đăng nhập cuối</span>
-                      <span className="font-medium text-right">
-                        {currentUser.last_login_at ? (typeof currentUser.last_login_at === 'string' || currentUser.last_login_at instanceof Date ? new Date(currentUser.last_login_at).toLocaleString("vi-VN") : 'Chưa có thông tin') : (currentUser.lastActivity ? (typeof currentUser.lastActivity === 'string' || currentUser.lastActivity instanceof Date ? new Date(currentUser.lastActivity).toLocaleString("vi-VN") : 'Chưa có thông tin') : 'Chưa có thông tin')}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">IP hiện tại</span>
-                      <span className="font-medium text-xs">
-                        {userIP !== "Loading..." ? userIP : currentUser.ipAddress || "Unknown"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Thiết bị</span>
-                      <span className="font-medium text-xs">
-                        {deviceInfo?.deviceType || "Unknown"}
-                      </span>
-                    </div>
-                    {deviceInfo && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Trình duyệt</span>
-                        <span className="font-medium text-xs">
-                          {deviceInfo.browser} ({deviceInfo.os})
-                        </span>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t">
-                      <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                        <p className="text-xs text-muted-foreground uppercase">Trạng thái</p>
-                        <p className="font-semibold text-blue-600">
-                          {currentUser.status === "active" ? "Hoạt động" : "Tạm khóa"}
-                        </p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                        <p className="text-xs text-muted-foreground uppercase">Số lần đăng nhập</p>
-                        <p className="font-semibold text-purple-600">{currentUser.loginCount || 1}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
-                        <p className="text-xs text-muted-foreground uppercase">Sản phẩm đã mua</p>
-                        <p className="font-semibold text-green-600">{userPurchases.length}</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
-                        <p className="text-xs text-muted-foreground uppercase">Tổng chi tiêu</p>
-                        <p className="font-semibold text-yellow-600">
-                          {stats.totalSpent.toLocaleString("vi-VN")}đ
-                        </p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-pink-50 dark:bg-pink-900/20">
-                        <p className="text-xs text-muted-foreground uppercase">Tổng lượt tải xuống</p>
-                        <p className="font-semibold text-pink-600">
-                          {userPurchases.reduce((sum, purchase) => sum + (purchase.downloads || 0), 0)}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+            <TabsContent value="profile" className="space-y-4 mt-6">
+              <ProfileSection
+                currentUser={currentUser!}
+                profileForm={profileForm}
+                profileMessage={profileMessage}
+                avatarPreview={avatarPreview}
+                isSavingProfile={isSavingProfile}
+                isUploadingAvatar={isUploadingAvatar}
+                userIP={userIP}
+                deviceInfo={deviceInfo}
+                userPurchases={userPurchases}
+                stats={stats}
+                downloadRecords={downloadRecords}
+                onProfileInputChange={handleProfileInputChange}
+                onAvatarChange={handleAvatarChange}
+                onProfileSubmit={handleProfileSubmit}
+                onPasswordChange={() => router.push("/dashboard/change-password")}
+              />
             </TabsContent>
 
-            <TabsContent value="security" className="space-y-4 mt-6 animate-fade-in-up">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card className="md:col-span-2 glass-card border-border/50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <ShieldCheck className="w-5 h-5 mr-2" />
-                      Xác thực hai lớp (2FA)
-                    </CardTitle>
-                    <CardDescription>
-                      Bật Google Authenticator để bảo vệ tài khoản. Chỉ hiển thị mã backup khi vừa kích hoạt.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Trạng thái</p>
-                        <p className="font-semibold">
-                          {securityPreferences.twoFactorEnabled ? "Đang bật 2FA" : "Chưa bật 2FA"}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        {securityPreferences.twoFactorEnabled ? (
-                          <Button
-                            variant="outline"
-                            onClick={disableTwoFactor}
-                            disabled={isDisablingTwoFactor}
-                          >
-                            {isDisablingTwoFactor ? "Đang tắt..." : "Tắt 2FA"}
-                          </Button>
-                        ) : (
-                          <Button onClick={startTwoFactorSetup} disabled={isStartingTwoFactor}>
-                            {isStartingTwoFactor ? "Đang tạo..." : "Bật 2FA"}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {!securityPreferences.twoFactorEnabled && twoFactorSecret && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border rounded-lg p-4">
-                        <div className="space-y-3">
-                          <p className="font-medium">Quét mã QR bằng Google Authenticator</p>
-                          {twoFactorQRCode && (
-                            <Image
-                              src={twoFactorQRCode}
-                              alt="QR Code"
-                              width={160}
-                              height={160}
-                              className="w-40 h-40 border rounded-lg bg-white"
-                              unoptimized
-                              priority
-                            />
-                          )}
-                          <p className="text-xs text-muted-foreground break-all">
-                            Secret: <span className="font-mono">{twoFactorSecret}</span>
-                          </p>
-                        </div>
-                        <div className="space-y-3">
-                          <Label htmlFor="twofactor-token">Nhập mã OTP 6 chữ số</Label>
-                          <Input
-                            id="twofactor-token"
-                            value={twoFactorToken}
-                            onChange={(e) => setTwoFactorToken(e.target.value)}
-                            placeholder="123456"
-                          />
-                          <Button onClick={verifyTwoFactor} disabled={isVerifyingTwoFactor || !twoFactorToken}>
-                            {isVerifyingTwoFactor ? "Đang xác minh..." : "Xác nhận & bật 2FA"}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {(twoFactorBackupCodes.length > 0 || securityPreferences.backupCodes?.length > 0) && (
-                      <div className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">Mã backup mới</p>
-                            <p className="text-sm text-muted-foreground">
-                              Lưu trữ ngoại tuyến. Mỗi mã dùng một lần.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-center text-sm font-mono">
-                          {(twoFactorBackupCodes.length > 0 ? twoFactorBackupCodes : securityPreferences.backupCodes || []).map(
-                            (code) => (
-                              <div key={code} className="bg-muted rounded py-2">
-                                {code}
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="liquid-glass-card border-border/50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <KeyRound className="w-5 h-5 mr-2" />
-                      Cảnh báo đăng nhập & thiết bị
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {[
-                      {
-                        key: "loginNotifications" as const,
-                        title: "Thông báo đăng nhập",
-                        description: "Gửi email khi xuất hiện phiên đăng nhập mới.",
-                      },
-                      {
-                        key: "deviceAlerts" as const,
-                        title: "Cảnh báo thiết bị lạ",
-                        description: "Nhắc nhở khi phát hiện thiết bị chưa tin cậy.",
-                      },
-                    ].map((item) => (
-                      <div key={item.key} className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="font-medium">{item.title}</p>
-                          <p className="text-sm text-muted-foreground">{item.description}</p>
-                        </div>
-                        <Switch
-                          checked={securityPreferences[item.key]}
-                          onCheckedChange={handleSecurityToggle(item.key)}
-                        />
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-
-                <Card className="liquid-glass-card border-border/50 shadow-lg hover:shadow-xl transition-shadow duration-300">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Smartphone className="w-5 h-5 mr-2" />
-                      Thiết bị đang hoạt động
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2 text-sm">
-                      <div className="p-3 border rounded-lg flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">
-                            {deviceInfo ? `${deviceInfo.browser} • ${deviceInfo.os}` : "Thiết bị hiện tại"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            IP: {userIP !== "Loading..." ? userIP : "Đang xác định"}
-                          </p>
-                        </div>
-                        <Badge variant="secondary">Hoạt động</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Danh sách chi tiết và đăng xuất từ xa đang được cập nhật trong mục "Thiết bị".
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+            <TabsContent value="security" className="space-y-4 mt-6">
+              <SecuritySection
+                securityPreferences={securityPreferences}
+                isDisablingTwoFactor={isDisablingTwoFactor}
+                isStartingTwoFactor={isStartingTwoFactor}
+                isVerifyingTwoFactor={isVerifyingTwoFactor}
+                twoFactorSecret={twoFactorSecret}
+                twoFactorQRCode={twoFactorQRCode}
+                twoFactorToken={twoFactorToken}
+                twoFactorBackupCodes={twoFactorBackupCodes}
+                onTwoFactorToggle={handleTwoFactorToggle}
+                onTwoFactorVerify={verifyTwoFactor}
+                onTwoFactorTokenChange={setTwoFactorToken}
+                onSecurityToggle={handleSecurityToggle}
+                deviceSessions={deviceSessions}
+                onRevokeSession={revokeSession}
+                onMarkTrusted={markTrusted}
+              />
             </TabsContent>
           </Tabs>
         </div>
