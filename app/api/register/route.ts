@@ -50,9 +50,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 6) {
+    // ✅ FIX: Sync với passwordSchema - min 8 ký tụ + phải có só và chũ cái
+    if (password.length < 8) {
       return NextResponse.json(
-        { success: false, error: 'Mật khẩu phải có ít nhất 6 ký tự' },
+        { success: false, error: 'Mật khẩu phải có ít nhất 8 ký tự' },
+        { status: 400 }
+      );
+    }
+    if (!/[0-9]/.test(password) || !/[A-Za-z]/.test(password)) {
+      return NextResponse.json(
+        { success: false, error: 'Mật khẩu phải chứa cả chữ cái và chữ số' },
         { status: 400 }
       );
     }

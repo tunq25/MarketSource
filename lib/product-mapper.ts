@@ -73,6 +73,7 @@ export function mapFrontendToBackend(frontendProduct: any): any {
     tags: Array.isArray(frontendProduct.tags) ? frontendProduct.tags : (frontendProduct.tags ? frontendProduct.tags.split(',').map((t: string) => t.trim()) : []),
     // Map active status
     isActive: frontendProduct.isActive !== undefined ? frontendProduct.isActive : true,
+    isFeatured: frontendProduct.isFeatured !== undefined ? Boolean(frontendProduct.isFeatured) : undefined,
     // Admin can manually set these
     averageRating: frontendProduct.averageRating !== undefined ? parseFloat(frontendProduct.averageRating) : undefined,
     downloadCount: frontendProduct.downloadCount !== undefined ? parseInt(frontendProduct.downloadCount) : undefined,
