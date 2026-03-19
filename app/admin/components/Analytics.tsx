@@ -60,9 +60,9 @@ export function Analytics({ users, products, purchases, deposits, withdrawals }:
     const filteredWithdrawals = filterByTimeRange(withdrawals, ["timestamp", "created_at"])
 
     // Revenue analytics
-    const totalRevenue = filteredPurchases.reduce((sum, p) => sum + (p.amount || 0), 0)
-    const totalDeposits = filteredDeposits.reduce((sum, d) => sum + (d.amount || 0), 0)
-    const totalWithdrawals = filteredWithdrawals.reduce((sum, w) => sum + (w.amount || 0), 0)
+    const totalRevenue = filteredPurchases.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    const totalDeposits = filteredDeposits.reduce((sum, d) => sum + Number(d.amount || 0), 0)
+    const totalWithdrawals = filteredWithdrawals.reduce((sum, w) => sum + Number(w.amount || 0), 0)
     // ✅ FIX: netRevenue chỉ tính từ sales (purchases), không cộng deposits vào
     // Deposits là tiền nạp của user, không phải doanh thu bán hàng
     const netRevenue = totalRevenue
@@ -82,7 +82,7 @@ export function Analytics({ users, products, purchases, deposits, withdrawals }:
       const sales = filteredPurchases.filter(p => p.product_id === product.id).length
       const revenue = filteredPurchases
         .filter(p => p.product_id === product.id)
-        .reduce((sum, p) => sum + (p.amount || 0), 0)
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0)
       return {
         ...product,
         sales,
@@ -123,9 +123,9 @@ export function Analytics({ users, products, purchases, deposits, withdrawals }:
       return {
         date: dateStr,
         dateLabel,
-        revenue: dayPurchases.reduce((sum, p) => sum + (p.amount || 0), 0),
-        deposits: dayDeposits.reduce((sum, d) => sum + (d.amount || 0), 0),
-        withdrawals: dayWithdrawals.reduce((sum, w) => sum + (w.amount || 0), 0),
+        revenue: dayPurchases.reduce((sum, p) => sum + Number(p.amount || 0), 0),
+        deposits: dayDeposits.reduce((sum, d) => sum + Number(d.amount || 0), 0),
+        withdrawals: dayWithdrawals.reduce((sum, w) => sum + Number(w.amount || 0), 0),
         users: dayUsers.length,
         transactions: dayPurchases.length
       }
@@ -631,7 +631,7 @@ export function Analytics({ users, products, purchases, deposits, withdrawals }:
                     </p>
                   </div>
                   <p className="text-sm font-bold text-green-600">
-                    {purchase.amount.toLocaleString('vi-VN')}đ
+                    {Number(purchase.amount || 0).toLocaleString('vi-VN')}đ
                   </p>
                 </div>
               ))}

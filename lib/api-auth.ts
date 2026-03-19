@@ -54,6 +54,23 @@ export async function verifyFirebaseToken(
       };
     }
 
+    // ✅ FIX: Check JWT auth-token cookie (set bởi /api/login khi login email/password)
+    try {
+      const { cookies } = await import('next/headers');
+      const cookieStore = await cookies();
+      const authTokenCookie = cookieStore.get('auth-token');
+      if (authTokenCookie) {
+        const { verifyToken } = await import('@/lib/jwt');
+        const payload = await verifyToken(authTokenCookie.value);
+        if (payload?.email) {
+          return {
+            uid: payload.userId || payload.email,
+            email: payload.email
+          };
+        }
+      }
+    } catch { /* Ignore cookie check errors */ }
+
     const authHeader = request.headers.get('Authorization');
     const userEmail = request.headers.get('X-User-Email');
     const emailAuthSecret = request.headers.get('X-Email-Auth-Secret');

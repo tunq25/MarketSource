@@ -56,35 +56,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (action === 'approve') {
-      // ✅ FIX: Query withdrawal để validate (không cần FOR UPDATE vì approveWithdrawalAndUpdateBalanceMySQL đã có transaction)
-      const { queryOne } = await import('@/lib/database-mysql');
-      const withdrawal = await queryOne<any>(
-        'SELECT id, user_id, amount, status FROM withdrawals WHERE id = ?',
-        [withdrawalId]
+    // ✅ FIX: Query withdrawal state cho CẢ hai action (approve và reject)
+    // Để tránh trường hợp thao tác nhầm vào phiếu đã được xử lý
+    const { queryOne } = await import('@/lib/database-mysql');
+    const withdrawal = await queryOne<any>(
+      'SELECT id, user_id, amount, status FROM withdrawals WHERE id = ?',
+      [withdrawalId]
+    );
+
+    if (!withdrawal) {
+      return NextResponse.json(
+        { success: false, error: 'Withdrawal not found' },
+        { status: 404 }
       );
+    }
 
-      if (!withdrawal) {
-        return NextResponse.json(
-          { success: false, error: 'Withdrawal not found' },
-          { status: 404 }
-        );
-      }
+    // ✅ FIX: Chung logic bảo vệ (Bao gồm cả reject và approve)
+    if (withdrawal.status !== 'pending') {
+      return NextResponse.json(
+        { success: false, error: `Withdrawal has already been processed (${withdrawal.status})` },
+        { status: 400 }
+      );
+    }
 
-      // ✅ FIX: Validate withdrawal status
-      if (withdrawal.status === 'approved') {
-        return NextResponse.json(
-          { success: false, error: 'Withdrawal has already been approved' },
-          { status: 400 }
-        );
-      }
-
-      if (withdrawal.status === 'rejected') {
-        return NextResponse.json(
-          { success: false, error: 'Withdrawal has been rejected and cannot be approved' },
-          { status: 400 }
-        );
-      }
+    if (action === 'approve') {
 
       // ✅ FIX: Validate userId match với withdrawal (Ép sang chuỗi để so sánh vì CSDL kết xuất BigInt là chuỗi)
       const withdrawalUserId = withdrawal.user_id;

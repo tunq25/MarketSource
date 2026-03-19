@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
         const cookieStore = await cookies();
         const tokenCookie = cookieStore.get('auth-token');
         if (tokenCookie) {
-          const jwt = await import('@/lib/jwt');
-          const payload = await (jwt as any).verifyToken?.(tokenCookie.value);
+          const { verifyToken } = await import('@/lib/jwt');
+          const payload = await verifyToken(tokenCookie.value);
           if (payload?.email) {
             authenticatedEmail = payload.email;
           }

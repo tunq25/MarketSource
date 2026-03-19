@@ -101,6 +101,8 @@ export function FloatingHeader() {
     // ✅ FIX: Dùng safe localStorage utils
     removeLocalStorage('currentUser')
     removeLocalStorage('isLoggedIn')
+    // ✅ FIX: Xóa auth-token cookie (set bởi /api/login)
+    document.cookie = 'auth-token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT'
     setUser(null)
     window.dispatchEvent(new Event('userUpdated'))
     router.push('/')

@@ -49,6 +49,7 @@ type UsersMap = Record<string, UserData>
 
 class UserManager {
   private firestorePromise: Promise<any | null> | null = null
+  private lastApiPersist: Record<string, number> = {}
 
   private getNavigatorOnline(): boolean {
     if (!isBrowser()) return false
@@ -248,7 +249,15 @@ class UserManager {
   }
 
   private async persistToApi(user: UserData): Promise<boolean> {
-    if (!isBrowser()) return false
+    if (!isBrowser() || !user.uid) return false
+    
+    // ✅ FIX: Throttling 2 giây cho mỗi UID để tránh spam /api/save-user liên tục
+    const now = Date.now();
+    if (this.lastApiPersist[user.uid] && now - this.lastApiPersist[user.uid] < 2000) {
+      return true; // Return true as it's recently saved
+    }
+    this.lastApiPersist[user.uid] = now;
+
     try {
       const payload = {
         email: user.email,
@@ -266,6 +275,7 @@ class UserManager {
       const response = await fetch("/api/save-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ FIX: Gửi cookie auth-token kèm request
         body: JSON.stringify(payload),
       })
 

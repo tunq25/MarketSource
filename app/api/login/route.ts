@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserByEmail, createOrUpdateUser } from '@/lib/database-mysql';
 import { getClientIP } from '@/lib/api-auth';
 import bcrypt from 'bcryptjs';
+import { SignJWT } from 'jose';
 
 /**
  * API Login - Xác thực user với email/password
@@ -71,14 +72,25 @@ export async function POST(request: NextRequest) {
       ipAddress,
     });
 
-    // Return user data (không trả về password_hash)
-    const { password_hash, ...userWithoutPassword } = user;
+    // ✅ FIX: Tạo auth-token JWT cookie cho user sau login thành công
+    // Đảm bảo /api/save-user có thể verify identity khi userManager.setUser() gọi
+    const jwtSecret = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
+    const secret = new TextEncoder().encode(jwtSecret);
+    const authToken = await new SignJWT({ 
+      userId: String(user.id), 
+      email: user.email, 
+      role: user.role || 'user' 
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime('7d')
+      .sign(secret);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       user: {
         id: user.id,
-        uid: String(user.id), // Convert to string for compatibility
+        uid: String(user.id),
         email: user.email,
         name: user.name,
         username: user.username,
@@ -87,6 +99,17 @@ export async function POST(request: NextRequest) {
         role: user.role || 'user',
       },
     });
+
+    // Set auth-token cookie
+    response.cookies.set('auth-token', authToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
+
+    return response;
   } catch (error: any) {
     const { logger } = await import('@/lib/logger');
     logger.error('Login API error', error, { endpoint: '/api/login' });

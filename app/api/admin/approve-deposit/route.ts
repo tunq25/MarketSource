@@ -56,35 +56,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (action === 'approve') {
-      // ✅ FIX: Query deposit để validate (không cần FOR UPDATE vì approveDepositAndUpdateBalanceMySQL đã có transaction)
-      const { queryOne } = await import('@/lib/database-mysql');
-      const deposit = await queryOne<any>(
-        'SELECT id, user_id, amount, status FROM deposits WHERE id = ?',
-        [depositId]
+    // ✅ FIX: Query deposit state cho CẢ hai action (approve và reject)
+    // Để tránh trường hợp reject một phiếu đã được approve (gây mất dấu đối soát)
+    const { queryOne } = await import('@/lib/database-mysql');
+    const deposit = await queryOne<any>(
+      'SELECT id, user_id, amount, status FROM deposits WHERE id = ?',
+      [depositId]
+    );
+
+    if (!deposit) {
+      return NextResponse.json(
+        { success: false, error: 'Deposit not found' },
+        { status: 404 }
       );
+    }
 
-      if (!deposit) {
-        return NextResponse.json(
-          { success: false, error: 'Deposit not found' },
-          { status: 404 }
-        );
-      }
+    // ✅ FIX: Chung logic bảo vệ (Bao gồm cả reject vaf approve)
+    if (deposit.status !== 'pending') {
+      return NextResponse.json(
+        { success: false, error: `Deposit has already been processed (${deposit.status})` },
+        { status: 400 }
+      );
+    }
 
-      // ✅ FIX: Validate deposit status
-      if (deposit.status === 'approved') {
-        return NextResponse.json(
-          { success: false, error: 'Deposit has already been approved' },
-          { status: 400 }
-        );
-      }
-
-      if (deposit.status === 'rejected') {
-        return NextResponse.json(
-          { success: false, error: 'Deposit has been rejected and cannot be approved' },
-          { status: 400 }
-        );
-      }
+    if (action === 'approve') {
 
       // ✅ FIX: Validate userId match với deposit (Ép sang chuỗi để so sánh vì CSDL có thể trả ra BigInt là chuỗi)
       const depositUserId = deposit.user_id;

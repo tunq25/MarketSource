@@ -208,6 +208,7 @@ export default function DashboardPage() {
       formData.append("email", currentUser.email)
       const response = await fetch("/api/profile/avatar", {
         method: "POST",
+        credentials: "include", // ✅ FIX: Gửi auth-token cookie
         body: formData,
       })
       const data = await response.json()
@@ -284,6 +285,7 @@ export default function DashboardPage() {
       const response = await fetch("/api/profile/2fa/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ FIX: Gửi auth-token cookie
         body: JSON.stringify({ email: currentUser.email }),
       })
       const data = await response.json()
@@ -307,6 +309,7 @@ export default function DashboardPage() {
       const response = await fetch("/api/profile/2fa/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ FIX: Gửi auth-token cookie
         body: JSON.stringify({
           email: currentUser.email,
           secret: twoFactorSecret,
@@ -343,6 +346,7 @@ export default function DashboardPage() {
       const response = await fetch("/api/profile/2fa/disable", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ FIX: Gửi auth-token cookie
         body: JSON.stringify({ email: currentUser.email }),
       })
       const data = await response.json()
@@ -448,7 +452,7 @@ export default function DashboardPage() {
         id: `deposit-${d.id}`,
         type: "deposit" as const,
         time: d.approvedTime || d.timestamp,
-        title: `Nạp ${d.amount.toLocaleString("vi-VN")}đ qua ${d.method}`,
+        title: `Nạp ${Number(d.amount || 0).toLocaleString("vi-VN")}đ qua ${d.method}`,
         amount: d.amount,
         meta: d.transactionId,
       })),
@@ -456,7 +460,7 @@ export default function DashboardPage() {
         id: `withdraw-${w.id}`,
         type: "withdraw" as const,
         time: w.approvedTime || w.requestTime,
-        title: `Rút ${w.amount.toLocaleString("vi-VN")}đ`,
+        title: `Rút ${Number(w.amount || 0).toLocaleString("vi-VN")}đ`,
         amount: w.amount,
         meta: w.bankName,
       })),
@@ -1883,7 +1887,7 @@ export default function DashboardPage() {
                         ...depositHistory.map((d: any) => ({
                           type: "deposit" as const,
                           time: d.approvedTime || d.timestamp,
-                          label: `Nạp ${d.amount.toLocaleString(
+                          label: `Nạp ${Number(d.amount || 0).toLocaleString(
                             "vi-VN"
                           )}đ qua ${d.method}`,
                           amount: d.amount,
@@ -1891,7 +1895,7 @@ export default function DashboardPage() {
                         ...withdrawHistory.map((w: any) => ({
                           type: "withdraw" as const,
                           time: w.approvedTime || w.requestTime,
-                          label: `Rút ${w.amount.toLocaleString(
+                          label: `Rút ${Number(w.amount || 0).toLocaleString(
                             "vi-VN"
                           )}đ về ${w.bankName}`,
                           amount: w.amount,

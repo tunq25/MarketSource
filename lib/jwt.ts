@@ -4,11 +4,11 @@ let cachedSecret: Uint8Array | null = null;
 let cachedSecretKey: string | null = null;
 
 function getSecret(): Uint8Array {
-  const secretKey = process.env.JWT_SECRET;
+  const secretKey = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
 
   if (!secretKey || secretKey === 'default-secret-key-change-in-production') {
     throw new Error(
-      'JWT_SECRET is not set or using default value. Please set JWT_SECRET in environment variables.'
+      'JWT_SECRET or NEXTAUTH_SECRET must be set in environment variables.'
     );
   }
 
@@ -44,6 +44,24 @@ export async function verifyAdminToken(token: string): Promise<{ userId: string;
       userId: payload.userId as string,
       email: payload.email as string,
       role: payload.role as string,
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Verify generic JWT token (cho cả user thường và admin)
+ * Được sử dụng bởi /api/save-user để verify auth-token cookie
+ */
+export async function verifyToken(token: string): Promise<{ userId: string; email: string; role: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecret());
+    
+    return {
+      userId: payload.userId as string,
+      email: payload.email as string,
+      role: (payload.role as string) || 'user',
     };
   } catch (error) {
     return null;

@@ -73,7 +73,10 @@ export async function GET(request: NextRequest) {
     }
 
     const authUser = await verifyFirebaseToken(request);
-    if (!authUser) {
+    const { requireAdmin } = await import('@/lib/api-auth');
+    const isAdmin = await requireAdmin(request).catch(() => false);
+
+    if (!authUser && !isAdmin) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -81,7 +84,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { getNotifications, getUserIdByEmail } = await import('@/lib/database-mysql');
-    const userId = await getUserIdByEmail(authUser.email || '');
+    
+    // Ưu tiên authUser, nếu không có lấy email của Admin
+    const userEmail = authUser?.email || (isAdmin as any)?.email || '';
+    const userId = await getUserIdByEmail(userEmail);
 
     if (!userId) {
       return NextResponse.json(

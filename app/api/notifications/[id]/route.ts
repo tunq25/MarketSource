@@ -12,14 +12,19 @@ export async function PUT(
   try {
     const routeParams = await params
     const authUser = await verifyFirebaseToken(request)
-    if (!authUser) {
+    const { requireAdmin } = await import('@/lib/api-auth')
+    const isAdmin = await requireAdmin(request).catch(() => false)
+
+    if (!authUser && !isAdmin) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    const userId = await getUserIdByEmail(authUser.email || '')
+    const { getUserIdByEmail } = await import('@/lib/database-mysql')
+    const userEmail = authUser?.email || (isAdmin as any)?.email || ''
+    const userId = await getUserIdByEmail(userEmail)
     if (!userId) {
       return NextResponse.json(
         { error: 'User not found' },
@@ -72,14 +77,19 @@ export async function DELETE(
   try {
     const routeParams = await params
     const authUser = await verifyFirebaseToken(request)
-    if (!authUser) {
+    const { requireAdmin } = await import('@/lib/api-auth')
+    const isAdmin = await requireAdmin(request).catch(() => false)
+
+    if (!authUser && !isAdmin) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    const userId = await getUserIdByEmail(authUser.email || '')
+    const { getUserIdByEmail } = await import('@/lib/database-mysql')
+    const userEmail = authUser?.email || (isAdmin as any)?.email || ''
+    const userId = await getUserIdByEmail(userEmail)
     if (!userId) {
       return NextResponse.json(
         { error: 'User not found' },
