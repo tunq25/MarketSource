@@ -15,8 +15,8 @@ const regions = [
     'aws-0-sa-east-1',
     'aws-0-ca-central-1'
 ];
-const pwd = 'GBxN2dxh9Wvat';
-const tenant = 'shbiitaxhncsjstijcql';
+const pwd = process.env.SUPABASE_DB_PWD || 'GBxN2dxh9Wvat'; // Fallback for dev, but env preferred
+const tenant = process.env.SUPABASE_TENANT_ID || 'shbiitaxhncsjstijcql';
 
 async function scan() {
     for (const region of regions) {

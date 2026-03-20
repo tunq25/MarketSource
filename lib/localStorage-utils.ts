@@ -60,6 +60,8 @@ export function setLocalStorage<T>(key: string, value: T): boolean {
         return true;
       } catch (retryError) {
         logger.error('localStorage write failed even after cleanup', retryError);
+        // ✅ BUG #23: Throw error instead of silent fail
+        throw new Error(`LocalStorage Quota Exceeded for key "${key}" even after cleanup.`);
       }
     }
     

@@ -23,30 +23,25 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { re
 
             await client.query('BEGIN');
 
-            // Lấy balance hiện tại 
-            const userResult = await client.query(
-                'SELECT balance FROM users WHERE id = $1 FOR UPDATE',
-                [dep.user_id]
-            );
-            const currentBalance = parseFloat(userResult.rows[0]?.balance || '0');
+            // ✅ BUG #22 FIX: Atomic balance update to prevent Race Condition
             const depositAmount = parseFloat(dep.amount);
-            const newBalance = currentBalance + depositAmount;
-
+            
             // Approve deposit
             await client.query(
                 "UPDATE deposits SET status = 'approved', approved_time = NOW(), approved_by = 'system' WHERE id = $1",
                 [dep.id]
             );
-
-            // Cộng balance
-            await client.query(
-                'UPDATE users SET balance = $1, updated_at = NOW() WHERE id = $2',
-                [newBalance, dep.user_id]
+ 
+            // Cộng balance nguyên tử (Atomic update)
+            const updateResult = await client.query(
+                'UPDATE users SET balance = balance + $1, updated_at = NOW() WHERE id = $2 RETURNING balance',
+                [depositAmount, dep.user_id]
             );
+
 
             await client.query('COMMIT');
 
-            console.log(`✅ Approved! Balance: ${currentBalance} → ${newBalance}`);
+            console.log(`✅ Approved! New Balance: ${updateResult.rows[0]?.balance}`);
         }
 
         // Kiểm tra lại

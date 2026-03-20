@@ -95,11 +95,11 @@ export function DebugInfo() {
     localStorage.setItem('approvedWithdrawals', JSON.stringify(sampleWithdrawals));
     localStorage.setItem('userPurchases', JSON.stringify(samplePurchases));
     
-    console.log('✅ Test data created!');
     loadDebugData();
   }
 
-  if (!debugData) return null
+  if (process.env.NODE_ENV === 'production') return null;
+  if (!debugData) return null;
 
   return (
     <Card className="mb-6">

@@ -44,3 +44,5 @@ netlify.toml.local
 
 # OS
 Thumbs.db
+/tmp/
+*.tmp

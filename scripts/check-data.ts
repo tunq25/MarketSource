@@ -5,7 +5,8 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { re
 
 (async () => {
     try {
-        const r = await pool.query("SELECT id, email, name, balance, role FROM users WHERE email = 'tunq25@uef.edu.vn'");
+        const emailToCheck = process.env.CHECK_USER_EMAIL || 'tunq25@uef.edu.vn';
+        const r = await pool.query("SELECT id, email, name, balance, role FROM users WHERE email = $1", [emailToCheck]);
         console.log('User:', JSON.stringify(r.rows[0], null, 2));
 
         const d = await pool.query('SELECT id, user_id, amount, status, created_at FROM deposits ORDER BY created_at DESC LIMIT 5');

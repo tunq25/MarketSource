@@ -25,5 +25,9 @@ RUN chmod +x scripts/docker-entrypoint.sh
 # Mở port 3000
 EXPOSE 3000
 
+# ✅ BUG #25 FIX: Docker Health Check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
 # Chạy ứng dụng (đảm bảo migrate trước khi start)
 CMD ["./scripts/docker-entrypoint.sh"]

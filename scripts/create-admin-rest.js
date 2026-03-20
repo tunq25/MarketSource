@@ -5,15 +5,15 @@ async function createAdminWithRest() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const email = process.env.ADMIN_MAIL || process.env.ADMIN_EMAIL || 'qtussdev20@admin.com';
-    const password = process.env.ADMIN_PASSWORD || '20022007@Tu';
+    const email = process.env.ADMIN_MAIL || process.env.ADMIN_EMAIL;
+    const password = process.env.ADMIN_PASSWORD;
     const name = 'Admin Marketsource';
     const username = 'qtusadmin';
     const role = 'admin';
 
     if (!supabaseUrl || !serviceRoleKey || !email || !password) {
         console.error('❌ Missing Supabase URL, Service Role Key, ADMIN_MAIL, or ADMIN_PASSWORD');
-        return;
+        process.exit(1);
     }
 
     try {
