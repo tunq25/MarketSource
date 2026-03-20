@@ -6,7 +6,18 @@
 import { z } from 'zod'
 
 // User schemas
-export const emailSchema = z.string().email('Email không hợp lệ')
+// ✅ BUG #6 FIX: Blacklist disposable email domains
+const DISPOSABLE_DOMAINS = [
+  'tempmail.com', '10minutemail.com', 'guerrillamail.com', 'maildrop.cc', 
+  'dispostable.com', 'mailinator.com', 'yopmail.com'
+];
+
+export const emailSchema = z.string()
+  .email('Email không hợp lệ')
+  .refine((email) => {
+    const domain = email.split('@')[1];
+    return !DISPOSABLE_DOMAINS.includes(domain?.toLowerCase());
+  }, 'Vui lòng sử dụng địa chỉ email thật (không dùng email ảo)');
 // ✅ FIX: Nâng password policy: min 8 ký tự, phải có số và chữ
 export const passwordSchema = z.string()
   .min(8, 'Mật khẩu phải có ít nhất 8 ký tự')
@@ -52,8 +63,9 @@ export const withdrawalSchema = z.object({
   amount: z.number()
     .min(10000, 'Số tiền tối thiểu là 10,000 VNĐ')
     .max(100000000, 'Số tiền tối đa là 100,000,000 VNĐ'), // ✅ FIX: Thêm max amount
-  bankName: z.string().min(2, 'Tên ngân hàng không hợp lệ'),
-  accountNumber: z.string().regex(/^[0-9]{8,15}$/, 'Số tài khoản phải có 8-15 chữ số'),
+  bankName: z.string().min(2, 'Tên ngân hàng không hợp lệ')
+    .refine(val => val.length >= 3, 'Vui lòng nhập tên ngân hàng đầy đủ'),
+  accountNumber: z.string().regex(/^[0-9]{8,19}$/, 'Số tài khoản phải có 8-19 chữ số'),
   accountName: z.string().min(3, 'Tên chủ tài khoản phải có ít nhất 3 ký tự'),
   userId: z.union([z.string(), z.number()]).optional(),
   ipAddress: z.string().optional(),

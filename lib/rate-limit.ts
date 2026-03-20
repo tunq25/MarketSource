@@ -141,9 +141,14 @@ export async function checkRateLimitAndRespond(
   request: NextRequest,
   limit: number = 10,
   window: number = 10,
-  identifierPrefix: string = 'api'
+  identifierPrefix: string = 'api',
+  userId?: string | number
 ): Promise<NextResponse | null> {
-  const identifier = `${identifierPrefix}:${getIdentifier(request)}`
+  const ip = getIdentifier(request)
+  const identifier = userId 
+    ? `${identifierPrefix}:user:${userId}` 
+    : `${identifierPrefix}:ip:${ip}`
+    
   const result = await checkRateLimit(identifier, limit, window)
 
   if (!result.success) {

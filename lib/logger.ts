@@ -32,6 +32,14 @@ function sanitizeData(data: any): any {
     'credit_card',
     'cvv',
     'ssn',
+    'email',
+    'phone',
+    'mobile',
+    'address',
+    'account',
+    'card',
+    'hash',
+    'otp'
   ];
 
   if (Array.isArray(data)) {

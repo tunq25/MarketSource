@@ -9,11 +9,15 @@ import DOMPurify from 'isomorphic-dompurify';
 
 export const runtime = 'nodejs'
 
+const MAX_MESSAGE_LENGTH = 5000;
+
 // ✅ FIX: Sanitize message để tránh XSS triệt để bằng HTML Entities
 function sanitizeMessage(message: string): string {
   if (!message) return '';
-  // ✅ BUG #18 FIX: Use DOMPurify for robust XSS protection
-  return DOMPurify.sanitize(message.trim(), {
+  // ✅ BUG #10 FIX: Trực tiếp cắt chuỗi nếu quá dài trước khi sanitize
+  const truncated = message.length > MAX_MESSAGE_LENGTH ? message.substring(0, MAX_MESSAGE_LENGTH) : message;
+  
+  return DOMPurify.sanitize(truncated.trim(), {
     ALLOWED_TAGS: [], // No HTML allowed in chat
     ALLOWED_ATTR: []
   });
@@ -21,7 +25,7 @@ function sanitizeMessage(message: string): string {
 
 const messageSchema = z.object({
   receiverId: z.number().int().positive().optional(),
-  message: z.string().min(1).max(5000),
+  message: z.string().min(1).max(MAX_MESSAGE_LENGTH),
 });
 
 /**

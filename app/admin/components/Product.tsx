@@ -81,30 +81,46 @@ function RichTextToolbar({ textareaRef, value, onChange }: {
 }
 
 // ✅ Live Image Preview
-function ImagePreview({ src, alt, size = 'md' }: { src: string; alt: string; size?: 'sm' | 'md' | 'lg' }) {
+function ImagePreview({ src, alt, size = 'md', className = '' }: { src: string; alt: string; size?: 'sm' | 'md' | 'lg'; className?: string }) {
   const [err, setErr] = useState(false)
   const [loaded, setLoaded] = useState(false)
-  const sizeClass = size === 'sm' ? 'h-16 w-16' : size === 'lg' ? 'h-48 w-full' : 'h-32 w-full'
+  
+  const sizeClasses = {
+    sm: 'h-16 w-16',
+    md: 'h-32 w-full',
+    lg: 'h-48 w-full'
+  }
 
   useEffect(() => { setErr(false); setLoaded(false) }, [src])
 
+  // ✅ BUG #13 FIX: Sanitize image URL to prevent XSS (javascript:alert(1))
+  const isSafeImage = (url: string) => {
+    if (!url) return false;
+    const lower = url.toLowerCase().trim();
+    if (lower.startsWith('javascript:')) return false;
+    if (lower.startsWith('data:')) {
+      return lower.startsWith('data:image/');
+    }
+    return true;
+  };
+
   if (!src) return (
-    <div className={`${sizeClass} rounded-lg bg-gray-800/50 flex items-center justify-center border border-dashed border-gray-600`}>
+    <div className={`${sizeClasses[size]} rounded-lg bg-gray-800/50 flex items-center justify-center border border-dashed border-gray-600 ${className}`}>
       <ImageIcon className="w-6 h-6 text-gray-600" />
     </div>
   )
 
   return (
-    <div className={`${sizeClass} rounded-lg overflow-hidden border border-gray-600/50 bg-gray-900/50 relative`}>
+    <div className={`relative overflow-hidden rounded-lg bg-gray-900 border border-gray-700/50 flex flex-col ${sizeClasses[size]} ${className}`}>
       {!loaded && !err && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      {err ? (
+      {err || !isSafeImage(src) ? (
         <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 gap-1">
           <X className="w-5 h-5 text-red-400" />
-          <span className="text-xs">Lỗi URL</span>
+          <span className="text-xs">{!isSafeImage(src) ? 'URL không an toàn' : 'Lỗi URL'}</span>
         </div>
       ) : (
         <img
@@ -173,12 +189,29 @@ export default function Product({ products, setProducts, adminUser }: ProductPro
     return raw.split(',').map(s => s.trim()).filter(Boolean)
   }
 
-  // ✅ BUG #29 FIX: Validate URL to prevent XSS (javascript: links)
+  // ✅ BUG #6 FIX: Improved URL validation (SSRF & XSS protection)
   const isValidUrl = (url: string): boolean => {
     if (!url) return true;
     try {
       const u = new URL(url);
-      return ['http:', 'https:'].includes(u.protocol);
+      
+      // Enforce https in production
+      if (process.env.NODE_ENV === 'production' && u.protocol !== 'https:') {
+        return false;
+      }
+      if (!['http:', 'https:'].includes(u.protocol)) return false;
+
+      // Block local/internal hostnames
+      const hostname = u.hostname.toLowerCase();
+      const isInternal = 
+        hostname === 'localhost' || 
+        hostname === '127.0.0.1' || 
+        hostname.startsWith('192.168.') || 
+        hostname.startsWith('10.') ||
+        hostname.endsWith('.local') ||
+        hostname === '0.0.0.0';
+
+      return !isInternal;
     } catch {
       return false;
     }

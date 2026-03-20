@@ -15,8 +15,13 @@ const regions = [
     'aws-0-sa-east-1',
     'aws-0-ca-central-1'
 ];
-const pwd = process.env.SUPABASE_DB_PWD || 'GBxN2dxh9Wvat'; // Fallback for dev, but env preferred
-const tenant = process.env.SUPABASE_TENANT_ID || 'shbiitaxhncsjstijcql';
+const pwd = process.env.SUPABASE_DB_PWD;
+const tenant = process.env.SUPABASE_TENANT_ID;
+
+if (!pwd || !tenant) {
+    console.error('❌ Missing SUPABASE_DB_PWD or SUPABASE_TENANT_ID environment variables.');
+    process.exit(1);
+}
 
 async function scan() {
     for (const region of regions) {

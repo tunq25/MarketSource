@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
     if (rateLimitRes) return rateLimitRes
 
     // Auth
-    const authUser = await verifyFirebaseToken(request)
+    const authUser = await verifyFirebaseToken(request);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ success: false, error: 'Vui lòng đăng nhập' }, { status: 401 });
     }
 
     const ip = getClientIP(request)

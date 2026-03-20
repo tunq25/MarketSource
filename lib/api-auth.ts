@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { verifyCSRFToken } from './csrf';
+import { verifyAdminToken, invalidateAdminToken, adminTokenBlacklist } from './jwt';
 
 // Firebase Admin initialization (lazy load)
 let firebaseAdmin: any = null;
@@ -281,12 +283,11 @@ async function isDatabaseAdmin(email: string | null): Promise<boolean> {
 }
 
 async function validateAdminToken(token?: string | null) {
-  if (!token) {
+  if (!token || adminTokenBlacklist.has(token)) {
     return null;
   }
 
   try {
-    const { verifyAdminToken } = await import('@/lib/jwt');
     const decoded = await verifyAdminToken(token);
 
     if (decoded && decoded.role === 'admin') {
@@ -316,7 +317,7 @@ export async function requireAdmin(request: NextRequest) {
       const csrfHeader = request.headers.get('X-CSRF-Token');
       const csrfCookie = request.cookies.get('csrf-token')?.value;
       
-      if (!csrfHeader || !csrfCookie || csrfHeader !== csrfCookie) {
+      if (!csrfHeader || !csrfCookie || !verifyCSRFToken(csrfHeader, csrfCookie)) {
         const { logger } = await import('@/lib/logger');
         logger.warn('CSRF validation failed for admin action', {
           method: request.method,
@@ -343,7 +344,7 @@ export async function requireAdmin(request: NextRequest) {
     if (['POST', 'PUT', 'DELETE'].includes(request.method)) {
       const csrfHeader = request.headers.get('X-CSRF-Token');
       const csrfCookie = request.cookies.get('csrf-token')?.value;
-      if (!csrfHeader || !csrfCookie || csrfHeader !== csrfCookie) {
+      if (!csrfHeader || !csrfCookie || !verifyCSRFToken(csrfHeader, csrfCookie)) {
         throw new Error('CSRF validation failed: Invalid or missing token');
       }
     }

@@ -730,6 +730,7 @@ CREATE TABLE public.notifications (
   read_at timestamp with time zone,
   action_url text,
   created_at timestamp with time zone DEFAULT now(),
+  deleted_at timestamp with time zone,
   CONSTRAINT notifications_pkey PRIMARY KEY (id),
   CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
@@ -1378,6 +1379,8 @@ CREATE TABLE public.support_tickets (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   message text NOT NULL DEFAULT ''::text,
+  admin_reply text,
+  admin_replied_at timestamp without time zone,
   CONSTRAINT support_tickets_pkey PRIMARY KEY (id),
   CONSTRAINT support_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
   CONSTRAINT support_tickets_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.users(id),

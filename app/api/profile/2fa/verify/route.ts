@@ -15,6 +15,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    // ✅ BUG #12 FIX: 2FA Brute-force Protection (5 attempts / 10 mins)
+    const { checkRateLimitAndRespond } = await import('@/lib/rate-limit');
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 5, 600, '2fa-verify', authUser.uid);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const { email, token, secret } = await request.json()
     if (!email || email.toLowerCase() !== authUser.email?.toLowerCase()) {
       return NextResponse.json({ success: false, error: "Email không khớp với tài khoản đăng nhập" }, { status: 403 })

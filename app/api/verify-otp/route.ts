@@ -26,10 +26,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        let { email, otp } = validation.data;
-        email = email.trim().toLowerCase();
+        const { email, otp } = validation.data;
+        const normalizedEmail = email.trim().toLowerCase();
 
-        const user = await getUserByEmail(email);
+        // ✅ BUG #12 FIX: OTP Brute-force Protection (5 attempts / 10 mins)
+        const { checkRateLimitAndRespond } = await import('@/lib/rate-limit');
+        const rateLimitResponse = await checkRateLimitAndRespond(request, 5, 600, 'verify-otp', normalizedEmail);
+        if (rateLimitResponse) return rateLimitResponse;
+
+        const user = await getUserByEmail(normalizedEmail);
         if (!user) {
             return NextResponse.json(
                 { success: false, error: 'Email không tồn tại trong hệ thống.' },

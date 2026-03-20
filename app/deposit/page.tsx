@@ -349,8 +349,11 @@ export default function DepositPage() {
         throw new Error("Vui lòng điền đầy đủ thông tin")
       }
       const depositAmount = parseInt(amount)
-      if (depositAmount < 5000) {
+      if (isNaN(depositAmount) || depositAmount < 5000) {
         throw new Error("Số tiền nạp tối thiểu là 5,000đ")
+      }
+      if (depositAmount > 100000000) {
+        throw new Error("Số tiền nạp tối đa là 100,000,000đ")
       }
       const method = PAYMENT_METHODS.find(m => m.id === selectedMethod)
       if (!method) {

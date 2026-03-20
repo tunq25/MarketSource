@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Yêu cầu quyền Admin
-        await requireAdmin(request);
+        const admin = await requireAdmin(request);
 
         // Lấy Payload
         const body = await request.json();
@@ -60,6 +60,24 @@ export async function POST(request: NextRequest) {
             "UPDATE users SET password_hash = ? WHERE id = ?",
             [hashedPassword, normalizedId]
         );
+
+        // ✅ BUG #8 FIX: Log admin action
+        try {
+            const { logAdminAction } = await import('@/lib/audit-logger');
+            const adminId = (admin as any).userId || (admin as any).uid || 0;
+            await logAdminAction({
+                adminId: typeof adminId === 'number' ? adminId : 0,
+                adminEmail: (admin as any).email || 'unknown',
+                action: 'RESET_PASSWORD',
+                targetType: 'user',
+                targetId: normalizedId,
+                details: { targetUserId: normalizedId },
+                ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+            });
+        } catch (logErr) {
+            const { logger } = await import('@/lib/logger');
+            logger.error('Failed to log admin action for password reset', logErr);
+        }
 
         const { logger } = await import('@/lib/logger');
         logger.info(`Admin reset password for user`, { targetUserId: normalizedId });

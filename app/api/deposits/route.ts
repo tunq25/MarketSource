@@ -119,6 +119,20 @@ export async function POST(request: NextRequest): Promise<Response> {
       }
     }
 
+    // ✅ BUG #11 FIX: Check duplicate transaction ID
+    if (depositData.transactionId) {
+      const existingDeposit = await queryOne<any>(
+        'SELECT id FROM deposits WHERE transaction_id = ?',
+        [depositData.transactionId]
+      );
+      if (existingDeposit) {
+        return NextResponse.json({
+          success: false,
+          error: 'Mã giao dịch (Transaction ID) này đã tồn tại trong hệ thống'
+        }, { status: 400 });
+      }
+    }
+
     // Create deposit
     const result = await createDeposit({
       userId: depositData.userId || authUser.uid,
@@ -182,7 +196,7 @@ export async function PUT(request: NextRequest): Promise<Response> {
     }
 
     // Require admin for status updates
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
 
     const body = await request.json();
 
@@ -225,8 +239,21 @@ export async function PUT(request: NextRequest): Promise<Response> {
         Number(updateData.depositId),
         Number(deposit.user_id),
         Number(deposit.amount),
-        updateData.approvedBy || 'admin'
+        updateData.approvedBy || (admin as any).email || 'admin'
       );
+
+      // ✅ BUG #8 FIX: Log admin action
+      const { logAdminAction } = await import('@/lib/audit-logger');
+      const adminId = (admin as any).userId || (admin as any).uid || 0;
+      await logAdminAction({
+        adminId: typeof adminId === 'number' ? adminId : 0,
+        adminEmail: (admin as any).email || 'unknown',
+        action: 'APPROVE_DEPOSIT',
+        targetType: 'deposit',
+        targetId: updateData.depositId,
+        details: { amount: deposit.amount, userId: deposit.user_id },
+        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+      });
 
       logger.info('Deposit approved and balance updated', {
         depositId: updateData.depositId,

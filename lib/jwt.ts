@@ -33,10 +33,25 @@ export async function createAdminToken(userId: string, email: string): Promise<s
   return token;
 }
 
+// In-memory blacklist for admin tokens
+export const adminTokenBlacklist = new Set<string>();
+
+/**
+ * Invalidate an admin token (e.g., on logout)
+ */
+export function invalidateAdminToken(token: string) {
+  adminTokenBlacklist.add(token);
+  // Auto-cleanup after 24h
+  setTimeout(() => adminTokenBlacklist.delete(token), 1000 * 60 * 60 * 24);
+}
+
 /**
  * Verify admin JWT token
  */
 export async function verifyAdminToken(token: string): Promise<{ userId: string; email: string; role: string } | null> {
+  if (adminTokenBlacklist.has(token)) {
+    return null;
+  }
   try {
     const { payload } = await jwtVerify(token, getSecret());
     

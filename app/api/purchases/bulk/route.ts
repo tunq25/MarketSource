@@ -29,57 +29,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    // Tính tổng tiền và kiểm tra tính hợp lệ của sản phẩm
-    let totalAmount = 0;
-    const validatedItems = [];
-
-    for (const item of items) {
-      const product = await getProductById(item.id);
-      if (!product) {
-        return NextResponse.json({ success: false, error: `Sản phẩm #${item.id} không tồn tại` }, { status: 400 });
-      }
-      const price = Number(product.price) || 0;
-      const quantity = Math.max(1, Number(item.quantity) || 1);
-      totalAmount += price * quantity;
-      validatedItems.push({ ...product, quantity });
-    }
-
-    // Check balance
-    const user = await queryOne<any>("SELECT balance FROM users WHERE id = ?", [dbUserId]);
-    if (!user || user.balance < totalAmount) {
-      return NextResponse.json({ 
-        success: false, 
-        error: `Số dư không đủ. Cần thêm ${((totalAmount - (user?.balance || 0))).toLocaleString()}đ` 
-      }, { status: 400 });
-    }
-
-    // ✅ Thực hiện thanh toán hàng loạt trong 1 transaction (Database abstraction layer should handle transaction)
-    // Ở đây ta gọi createPurchase tuần tự hoặc dùng một function createBulkPurchase mới.
-    // Vì createPurchase đã dùng transaction nội bộ, ta nên gom lại để tối ưu hơn.
-    
-    // Tạm thời để an toàn và nhanh, ta dùng createPurchase nhưng tối ưu flow frontend
-    const results = [];
-    for (const item of validatedItems) {
-        try {
-            const result = await createPurchase({
-                userId: dbUserId,
-                productId: item.id,
-                amount: Number(item.price) * item.quantity,
-                userEmail: authUser.email || undefined
-            });
-            results.push({ id: item.id, success: true, purchaseId: result.id });
-        } catch (err: any) {
-            logger.error(`Bulk item purchase failed: ${item.id}`, err);
-            results.push({ id: item.id, success: false, error: err.message });
-        }
-    }
-
-    const finalBalance = await queryOne<any>("SELECT balance FROM users WHERE id = ?", [dbUserId]);
+    // ✅ Thực hiện thanh toán hàng loạt trong 1 transaction atomic
+    const { createBulkPurchaseMySQL } = await import('@/lib/database-mysql');
+    const result = await createBulkPurchaseMySQL({
+      userId: dbUserId,
+      items: items.map((it: any) => ({
+        id: it.id,
+        quantity: Math.max(1, Number(it.quantity) || 1)
+      })),
+      userEmail: authUser.email || undefined
+    });
 
     return NextResponse.json({
       success: true,
-      results,
-      newBalance: finalBalance?.balance
+      purchaseIds: result.purchaseIds,
+      newBalance: result.newBalance
     });
 
   } catch (error: any) {

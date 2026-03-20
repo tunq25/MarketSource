@@ -154,81 +154,55 @@ function CheckoutContent() {
       orders.unshift(order)
       setLocalStorage("orders", orders)
 
-      // ✅ FIX: Create purchase records trong database TRƯỚC khi update balance
-      // Đảm bảo purchase thành công mới trừ tiền
-      // Balance đã được trừ trong createPurchase() function (transaction-safe)
-      const purchaseResults = [];
-      const successfulItems: number[] = [];
-      let lastError = null;
-      // ✅ BUG #9+#12 FIX: Dùng apiPost thay vì raw fetch + localStorage token
-      const { apiPost } = await import('@/lib/api-client');
-      try {
-        for (const item of cartItems) {
-          const result = await apiPost('/api/purchases', {
-            userId: currentUser.uid || currentUser.id,
-            productId: item.id,
-            amount: (typeof item.price === 'number' ? item.price : Number(item.price) || 0) * (item.quantity !== undefined ? Number(item.quantity) : 1),
-            userEmail: currentUser.email
-          });
-          
-          if (!result.success) {
-            throw new Error(result.error || 'Purchase failed');
-          }
-          purchaseResults.push(result);
-          successfulItems.push(item.id);
-        }
-      } catch (purchaseError: any) {
-        logger.error('Failed processing purchase records', purchaseError);
-        lastError = purchaseError;
-      }
-
-      // Giữ lại item lỗi
-      const remainingCart = cartItems.filter(item => !successfulItems.includes(item.id));
-      setCartItems(remainingCart);
-
-      if (remainingCart.length === 0) {
-        removeLocalStorage("cartItems");
-      } else {
-        setLocalStorage("cartItems", remainingCart);
-        window.dispatchEvent(new Event("cartUpdated"));
-        
-        if (lastError) {
-          setError('Một số sản phẩm thanh toán bị lỗi: ' + (lastError.message || 'Unknown Error') + '. Hệ thống đã ghi nhận các sản phẩm thành công.');
-          setIsProcessing(false);
-          // Refetch fresh balance to show correctly
-          const { userManager } = await import('@/lib/userManager');
-          const updatedUserData = await userManager.getUser();
-          if (updatedUserData) {
-            setCurrentUser({...currentUser, balance: updatedUserData.balance});
-          }
-          return;
-        }
-      }
-
-      // ✅ FIX: Chỉ update balance SAU KHI tất cả purchases thành công
-      // Balance đã được trừ trong createPurchase() function (transaction-safe)
-      const { userManager } = await import('@/lib/userManager');
-      // Reload user để có balance mới nhất từ database
-      const updatedUserData = await userManager.getUser();
-      if (updatedUserData) {
-        const totalPaid = cartItems
-          .filter(item => successfulItems.includes(item.id))
-          .reduce((sum, item) => sum + ((typeof item.price === 'number' ? item.price : Number(item.price) || 0) * (item.quantity !== undefined ? Number(item.quantity) : 1)), 0);
-
-        const updatedUser = {
-          ...currentUser,
-          ...updatedUserData, // ✅ Mới đúng, merge hết Data mới nhất để không mất loginCount, avatar, v.v
-          balance: updatedUserData.balance || (currentUser.balance || 0) - totalPaid
-        };
-        setLocalStorage("currentUser", updatedUser);
-        setCurrentUser(updatedUser);
-      }
+      // ✅ BUG #7 FIX: TRUST SERVER BALANCE & USE BULK API
+      const { apiPost, apiGet } = await import('@/lib/api-client');
       
-      // Dispatch event để các component khác update
+      const result = await apiPost('/api/purchases/bulk', {
+        items: cartItems.map(item => ({ 
+          id: item.id, 
+          quantity: item.quantity !== undefined ? Number(item.quantity) : 1 
+        })),
+        userId: currentUser.uid || currentUser.id,
+        userEmail: currentUser.email
+      });
+
+      if (!result.success) {
+        // Nếu lỗi do số dư, reload balance ngay từ server
+        if (result.error?.toLowerCase().includes('số dư') || result.error?.toLowerCase().includes('insufficient')) {
+          const balanceRes = await apiGet('/api/get-balance');
+          if (balanceRes.success) {
+            setCurrentUser({ ...currentUser, balance: balanceRes.balance });
+            setLocalStorage("currentUser", { ...currentUser, balance: balanceRes.balance });
+          }
+        }
+        throw new Error(result.error || 'Thanh toán thất bại');
+      }
+
+      // Thanh toán thành công -> Cập nhật balance mới từ server trả về
+      const finalBalance = result.newBalance;
+      const updatedUser = {
+        ...currentUser,
+        balance: finalBalance
+      };
+      
+      setLocalStorage("currentUser", updatedUser);
+      setCurrentUser(updatedUser);
+      
+      // Load fresh user data from database helper also (userManager)
+      try {
+        const { userManager } = await import('@/lib/userManager');
+        await userManager.getUser(); // This updates local instance
+      } catch (e) {
+        logger.error('Failed to sync userManager', e);
+      }
+
+      // Dispatch event cho navbar/sidebar update
       window.dispatchEvent(new Event("userUpdated"));
+      window.dispatchEvent(new Event("cartUpdated"));
 
       // Clear cart
-      removeLocalStorage("cartItems")
+      setCartItems([]);
+      removeLocalStorage("cartItems");
 
       setSuccess(true)
 

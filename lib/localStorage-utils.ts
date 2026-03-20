@@ -46,23 +46,38 @@ export function setLocalStorage<T>(key: string, value: T): boolean {
     logger.warn('localStorage write failed', { key, error });
     
     // Nếu quota exceeded, try to clear old data
-    if (error instanceof Error && error.name === 'QuotaExceededError') {
+    if (error instanceof Error && (error.name === 'QuotaExceededError' || error.message.includes('quota'))) {
       logger.error('localStorage quota exceeded', error, { key });
       
-      // ✅ BUG #35 FIX: Cleanup strategy
-      // List các key không thiết yếu hoặc đã có trong DB
-      const lowPriorityKeys = ['adminNotifications', 'uploadedProducts', 'temp_purchases', 'debug_logs'];
-      lowPriorityKeys.forEach(k => localStorage.removeItem(k));
-      
-      // Thử lại 1 lần cuối sau khi dọn dẹp
-      try {
-        localStorage.setItem(key, JSON.stringify(value));
-        return true;
-      } catch (retryError) {
-        logger.error('localStorage write failed even after cleanup', retryError);
-        // ✅ BUG #23: Throw error instead of silent fail
-        throw new Error(`LocalStorage Quota Exceeded for key "${key}" even after cleanup.`);
+      // ✅ BUG #9 FIX: Enhanced granular cleanup strategy
+      const cleanupPriority = [
+        'debug_logs',
+        'temp_purchases',
+        'uploadedProducts',
+        'adminNotifications',
+        'orders',
+        'cartItems',
+        'userStats',
+        'recentViews'
+      ];
+
+      // Sort keys by size if possible, or just clear by priority
+      for (const k of cleanupPriority) {
+        if (localStorage.getItem(k)) {
+          localStorage.removeItem(k);
+          logger.info(`localStorage cleanup: removed ${k} to free space`);
+          try {
+            localStorage.setItem(key, JSON.stringify(value));
+            return true;
+          } catch {
+            continue;
+          }
+        }
       }
+      
+      // Last resort: Clear all but avoid clearing auth/essential keys if possible
+      // But for simplicity and safety of the write, we might need a more aggressive approach
+      // logger.warn('localStorage full: selective cleanup failed');
     }
     
     return false;

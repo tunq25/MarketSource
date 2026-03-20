@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 
 // ✅ BUG #7 FIX: Không dùng hardcoded secret trong production
 const CSRF_SECRET = process.env.CSRF_SECRET || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('CSRF_SECRET env variable is required in production!') })() : 'dev-csrf-secret-only');
@@ -28,8 +28,19 @@ export function hashCSRFToken(token: string): string {
  * Verify CSRF token
  */
 export function verifyCSRFToken(token: string, hashedToken: string): boolean {
-  const expectedHash = hashCSRFToken(token);
-  return expectedHash === hashedToken;
+  try {
+    const expectedHash = hashCSRFToken(token);
+    const expectedBuffer = Buffer.from(expectedHash, 'hex');
+    const actualBuffer = Buffer.from(hashedToken, 'hex');
+    
+    if (expectedBuffer.length !== actualBuffer.length) {
+      return false;
+    }
+    
+    return timingSafeEqual(expectedBuffer, actualBuffer);
+  } catch (error) {
+    return false;
+  }
 }
 
 /**

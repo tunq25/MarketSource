@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Require admin authentication
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
 
     const { withdrawalId, amount, userId, action, userEmail } = await request.json();
 
@@ -124,6 +124,19 @@ export async function POST(request: NextRequest) {
         adminEmail
       );
 
+      // ✅ BUG #8 FIX: Log admin action
+      const { logAdminAction } = await import('@/lib/audit-logger');
+      const adminId = (admin as any).userId || (admin as any).uid || 'unknown';
+      await logAdminAction({
+        adminId: typeof adminId === 'number' ? adminId : 0, // Fallback to 0 if not a numeric DB ID
+        adminEmail: (admin as any).email || 'unknown',
+        action: 'APPROVE_WITHDRAWAL',
+        targetType: 'withdrawal',
+        targetId: withdrawalId,
+        details: { amount, userId: dbUserId, newBalance: result.newBalance },
+        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+      });
+
       // ✅ FIX: userManager is client-side only — balance already updated in DB
       // Client-side sync happens automatically via userUpdated event
       const { logger } = await import('@/lib/logger');
@@ -187,6 +200,19 @@ export async function POST(request: NextRequest) {
         const { logger } = await import('@/lib/logger');
         logger.warn('Failed to create notification (non-critical)', { error: notifError, userId: dbUserIdForReject });
       }
+
+      // ✅ BUG #8 FIX: Log admin action for rejection
+      const { logAdminAction } = await import('@/lib/audit-logger');
+      const adminIdForReject = (admin as any).userId || (admin as any).uid || 0;
+      await logAdminAction({
+        adminId: typeof adminIdForReject === 'number' ? adminIdForReject : 0,
+        adminEmail: (admin as any).email || 'unknown',
+        action: 'REJECT_WITHDRAWAL',
+        targetType: 'withdrawal',
+        targetId: withdrawalId,
+        details: { status: 'rejected' },
+        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+      });
     }
 
     // Send notification

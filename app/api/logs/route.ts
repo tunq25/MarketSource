@@ -18,7 +18,10 @@ export async function POST(request: Request) {
        // To simplify, we keep rate limit but don't strictly block yet to allow error reporting from login page
     }
 
-    const body = await request.json()
+    const body = await request.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
+    }
     const { level, message, metadata } = body
 
     // Log với server-side logger
