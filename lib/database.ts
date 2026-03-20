@@ -1041,7 +1041,7 @@ export async function createWithdrawal(withdrawalData: {
       throw new Error('You have a pending withdrawal request. Please wait for approval.');
     }
 
-    // Insert withdrawal trong cùng transaction
+    // Insert withdrawal trong cùng transaction (Sử dụng RETURNING id cho PostgreSQL)
     const result = await client.query(
       `INSERT INTO withdrawals (user_id, amount, bank_name, account_number, account_name, user_email, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'pending')
@@ -1055,6 +1055,8 @@ export async function createWithdrawal(withdrawalData: {
         withdrawalData.userEmail || null,
       ]
     );
+
+    const withdrawalId = result.rows[0].id;
 
     await client.query('COMMIT');
 

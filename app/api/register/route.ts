@@ -132,18 +132,27 @@ export async function POST(request: NextRequest) {
       const { logger } = await import('@/lib/logger');
       logger.error('Failed to send welcome email', e);
     }
+    // ✅ BUG #7 FIX: Gửi thông báo Telegram cho Admin khi có user mới
     try {
       const { notifyNewUserRegistration } = await import('@/lib/notifications');
-      notifyNewUserRegistration({
-        userName: name,
-        userEmail: email,
-        ipAddress,
-      }).catch(async (err) => { 
-        const { logger } = await import('@/lib/logger');
-        logger.warn('Failed to notify new user registration (silent)', { error: err instanceof Error ? err.message : String(err) });
+      await notifyNewUserRegistration({
+        userName: name!,
+        userEmail: email!,
+        ipAddress: ipAddress || getClientIP(request)
       });
+      const { logger } = await import('@/lib/logger');
+      logger.info('Telegram notification sent for new user registration');
+    } catch (teleErr: any) {
+      const { logger } = await import('@/lib/logger');
+      logger.warn('Failed to send Telegram notification for registration', teleErr);
+    }
+
+    // ✅ BUG #10: Notification Wrapper (Optional/Old)
+    try {
+      if ((globalThis as any).notifyNewUser) {
+        (globalThis as any).notifyNewUser({ email, name });
+      }
     } catch (e) {
-      // Silent fail - không block registration flow, nhưng vẫn log để debug
       const { logger } = await import('@/lib/logger');
       logger.debug('New user notification wrapper failed', { error: e instanceof Error ? e.message : String(e) });
     }

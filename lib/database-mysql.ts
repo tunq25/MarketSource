@@ -129,15 +129,14 @@ function convertToPostgresSql(sql: string): string {
   // 0. Convert MySQL backticks (`) to literal double quotes (") for column names
   converted = converted.replace(/`/g, '"');
 
-  // 1. Convert INSERT IGNORE → INSERT ... ON CONFLICT DO NOTHING
-  converted = converted.replace(/INSERT\s+IGNORE\s+INTO/gi, 'INSERT INTO');
-  // Note: ON CONFLICT DO NOTHING is added by addToWishlistMySQL directly
+  // 1.5 Convert DATABASE() -> 'public' (PostgreSQL schema)
+  converted = converted.replace(/DATABASE\s*\(\s*\)/gi, "'public'");
 
   // 2. Convert ON DUPLICATE KEY UPDATE → ON CONFLICT DO UPDATE SET
   // Extract INSERT columns to determine conflict target
   const insertMatch = converted.match(/INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)/i);
   if (insertMatch && converted.includes('ON DUPLICATE KEY UPDATE')) {
-    const tableName = insertMatch[1];
+    const tableName = insertMatch[1].toLowerCase();
 
     // Determine conflict column based on table
     let conflictCol = 'id';
@@ -146,9 +145,10 @@ function convertToPostgresSql(sql: string): string {
     else if (['reviews'].includes(tableName)) conflictCol = 'user_id, product_id';
     else if (['product_ratings'].includes(tableName)) conflictCol = 'product_id';
     else if (['wishlists'].includes(tableName)) conflictCol = 'user_id, product_id';
-    else if (['settings'].includes(tableName)) conflictCol = '"key"';
+    else if (['settings', 'app_settings'].includes(tableName)) conflictCol = 'setting_key';
     else if (['user_coupons'].includes(tableName)) conflictCol = 'user_id, coupon_id';
     else if (['review_votes'].includes(tableName)) conflictCol = 'review_id, user_id';
+    else if (['deposits'].includes(tableName)) conflictCol = 'transaction_id';
 
     // Replace ON DUPLICATE KEY UPDATE → ON CONFLICT (col) DO UPDATE SET
     converted = converted.replace(
@@ -157,7 +157,7 @@ function convertToPostgresSql(sql: string): string {
     );
 
     // Replace VALUES(column_name) → EXCLUDED.column_name
-    converted = converted.replace(/VALUES\s*\(\s*(\w+)\s*\)/gi, 'EXCLUDED.$1');
+    converted = converted.replace(/VALUES\s*\(\s*(\b\w+\b)\s*\)/gi, 'EXCLUDED.$1');
   }
 
   // 3. Convert MySQL types and table options to PostgreSQL
@@ -1021,7 +1021,7 @@ export async function getProductsMySQL(filters?: {
     }
     if (filters?.isActive !== undefined) {
       sql += " AND p.is_active = ?"
-      params.push(filters.isActive)
+      params.push(usePostgresBridge ? !!filters.isActive : (filters.isActive ? 1 : 0))
     }
 
     sql += " ORDER BY p.created_at DESC"
@@ -1332,12 +1332,12 @@ export async function updateProductMySQL(
     }
     if (productData.isActive !== undefined) {
       updates.push("is_active = ?")
-      params.push(productData.isActive ? 1 : 0)
+      params.push(usePostgresBridge ? !!productData.isActive : (productData.isActive ? 1 : 0))
     }
     // ✅ FIX: isFeatured → is_featured column
     if (productData.isFeatured !== undefined) {
       updates.push("is_featured = ?")
-      params.push(productData.isFeatured ? 1 : 0)
+      params.push(usePostgresBridge ? !!productData.isFeatured : (productData.isFeatured ? 1 : 0))
     }
 
     // ✅ FIX: Cho phép admin manually set download_count
@@ -1888,7 +1888,7 @@ export async function getCouponsMySQL(filters?: {
 
     if (filters?.isActive !== undefined) {
       sql += " AND is_active = ?"
-      params.push(filters.isActive)
+      params.push(usePostgresBridge ? !!filters.isActive : (filters.isActive ? 1 : 0))
     }
 
     sql += " ORDER BY created_at DESC"
@@ -1981,7 +1981,7 @@ export async function createCouponMySQL(couponData: {
           couponData.usageLimit ?? null,
           couponData.validFrom ?? null,
           couponData.validUntil ?? null,
-          couponData.isActive !== false ? 1 : 0,
+          couponData.isActive !== false ? (usePostgresBridge ? true : 1) : (usePostgresBridge ? false : 0),
         ]
       )
       insertId = result.insertId;
@@ -2373,7 +2373,7 @@ export async function createBannerMySQL(bannerData: {
           bannerData.title,
           bannerData.imageUrl,
           bannerData.linkUrl || null,
-          bannerData.isActive !== false ? true : false,
+          bannerData.isActive !== false ? (usePostgresBridge ? true : 1) : (usePostgresBridge ? false : 0),
           bannerData.displayOrder || 0,
         ]
       )
