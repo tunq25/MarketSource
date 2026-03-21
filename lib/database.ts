@@ -113,7 +113,8 @@ function createPool(): Pool | null {
         ssl: process.env.DB_SSL === 'disable'
           ? undefined
           : {
-            rejectUnauthorized: false,
+            // ✅ FIX: rejectUnauthorized=true in production (MITM protection)
+            rejectUnauthorized: process.env.NODE_ENV === 'production',
           },
       });
 
@@ -175,7 +176,8 @@ function createPool(): Pool | null {
     ssl: process.env.DB_SSL === 'disable'
       ? undefined
       : {
-        rejectUnauthorized: false,
+        // ✅ FIX: rejectUnauthorized=true in production (MITM protection)
+        rejectUnauthorized: process.env.NODE_ENV === 'production',
       },
   };
 

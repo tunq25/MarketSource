@@ -42,9 +42,14 @@ function formatDeviceInfo(deviceInfo?: DeviceInfo) {
 }
 
 /**
- * CORE: Gửi tin nhắn Telegram với xử lý lỗi và timeout
+ * CORE: Gửi tin nhắn Telegram với retry logic + timeout
+ * ✅ FIX: Thêm exponential backoff retry (3 lần)
  */
-export async function sendTelegramNotification(message: string, chatId?: string) {
+export async function sendTelegramNotification(
+  message: string,
+  chatId?: string,
+  maxRetries: number = 3
+) {
   const token = TELEGRAM_BOT_TOKEN;
   const targetChatId = chatId || TELEGRAM_CHAT_ID;
 
@@ -53,33 +58,46 @@ export async function sendTelegramNotification(message: string, chatId?: string)
     return false;
   }
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+  let lastError: Error | null = null;
 
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: targetChatId,
-        text: message,
-        parse_mode: 'HTML',
-      }),
-      signal: controller.signal
-    });
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    clearTimeout(timeoutId);
+      const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: targetChatId,
+          text: message,
+          parse_mode: 'HTML',
+        }),
+        signal: controller.signal
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      logger.error('Telegram API error', new Error(JSON.stringify(errorData)));
-      return false;
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Telegram API error: ${JSON.stringify(errorData)}`);
+      }
+      return true;
+    } catch (error: any) {
+      lastError = error;
+      if (attempt < maxRetries - 1) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = 1000 * Math.pow(2, attempt);
+        logger.warn(`Telegram retry ${attempt + 1}/${maxRetries} after ${delay}ms`, {
+          error: error.message,
+        });
+        await new Promise(r => setTimeout(r, delay));
+      }
     }
-    return true;
-  } catch (error) {
-    logger.error('Telegram notification failed', error);
-    return false;
   }
+
+  logger.error('Telegram notification failed after all retries', lastError);
+  return false;
 }
 
 /**
