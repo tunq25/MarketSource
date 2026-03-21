@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomBytes } from 'crypto';
 import { getUserByEmail, createOrUpdateUser } from '@/lib/database';
 import { getClientIP } from '@/lib/api-auth';
 import bcrypt from 'bcryptjs';
@@ -72,6 +73,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const emailRateLimit = await checkRateLimitAndRespond(request, 5, 3600, 'register-email', email);
+    if (emailRateLimit) {
+      return emailRateLimit;
+    }
+
     // Check if email already exists
     const existingUser = await getUserByEmail(email);
 
@@ -112,7 +118,10 @@ export async function POST(request: NextRequest) {
     // Get IP address
     ipAddress = getClientIP(request);
 
-    // Create user
+    const verifyToken = randomBytes(32).toString('hex');
+    const verifyExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    // Create user (chưa xác minh email — token gửi qua mail)
     const result = await createOrUpdateUser({
       email,
       name,
@@ -120,6 +129,8 @@ export async function POST(request: NextRequest) {
       passwordHash,
       ipAddress,
       role: 'user',
+      emailVerificationToken: verifyToken,
+      emailVerificationExpires: verifyExpires,
     });
 
     if (!result || !result.id) {
@@ -196,7 +207,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Đăng ký thành công',
+      message: 'Đăng ký thành công. Vui lòng kiểm tra email để xác minh tài khoản.',
+      needsEmailVerification: true,
       userId: result.id,
       user: {
         id: result.id,

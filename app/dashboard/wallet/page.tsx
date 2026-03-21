@@ -69,7 +69,7 @@ export default function WalletPage() {
               <Button
                 size="lg"
                 className="flex-1"
-                onClick={() => router.push("/dashboard/overview#deposit")}
+                onClick={() => router.push("/dashboard/overview?tab=deposits")}
               >
                 Nạp tiền
               </Button>
@@ -77,7 +77,7 @@ export default function WalletPage() {
                 size="lg"
                 variant="outline"
                 className="flex-1"
-                onClick={() => router.push("/dashboard/overview#withdraw")}
+                onClick={() => router.push("/dashboard/overview?tab=withdrawals")}
               >
                 Rút tiền
               </Button>
@@ -91,7 +91,7 @@ export default function WalletPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-muted-foreground">Bật 2FA và cảnh báo đăng nhập để bảo vệ tài khoản.</p>
-            <Button variant="outline" onClick={() => router.push("/dashboard/overview#security")}>
+            <Button variant="outline" onClick={() => router.push("/dashboard/overview?tab=security")}>
               Truy cập trang bảo mật
             </Button>
           </CardContent>

@@ -43,22 +43,37 @@ export const registerSchema = z.object({
 // Deposit schemas
 export const depositMethodSchema = z.string().min(1, 'Phương thức thanh toán không được để trống')
 
-export const depositSchema = z.object({
-  amount: z.number()
-    .min(5000, 'Số tiền tối thiểu là 5,000 VNĐ')
-    .max(100000000, 'Số tiền tối đa là 100,000,000 VNĐ'), // ✅ FIX: Thêm max amount
-  method: depositMethodSchema,
-  transactionId: z.string().min(1, 'Mã giao dịch không được để trống').max(255),
-  userId: z.union([z.string(), z.number()]).optional(),
-  userEmail: z.string().email().optional(),
-  userName: z.string().optional(),
-  ipAddress: z.string().optional(),
-  deviceInfo: z.object({
-    deviceType: z.string().optional(),
-    browser: z.string().optional(),
-    os: z.string().optional(),
-  }).optional(),
-})
+export const depositSchema = z
+  .object({
+    amount: z
+      .number()
+      .min(5000, "Số tiền tối thiểu là 5,000 VNĐ")
+      .max(100000000, "Số tiền tối đa là 100,000,000 VNĐ"),
+    method: depositMethodSchema,
+    /** Mã giao dịch từ cổng thanh toán — hoặc dùng idempotencyKey */
+    transactionId: z.string().max(255).optional(),
+    /** Khóa idempotent do client tạo (retry an toàn); lưu như transaction_id trong DB */
+    idempotencyKey: z.string().min(8).max(128).optional(),
+    userId: z.union([z.string(), z.number()]).optional(),
+    userEmail: z.string().email().optional(),
+    userName: z.string().optional(),
+    ipAddress: z.string().optional(),
+    deviceInfo: z
+      .object({
+        deviceType: z.string().optional(),
+        browser: z.string().optional(),
+        os: z.string().optional(),
+      })
+      .optional(),
+  })
+  .refine(
+    (d) => {
+      const t = d.transactionId?.trim() ?? ""
+      const k = d.idempotencyKey?.trim() ?? ""
+      return t.length > 0 || k.length >= 8
+    },
+    { message: "Cần transactionId hoặc idempotencyKey (tối thiểu 8 ký tự)", path: ["transactionId"] }
+  )
 
 // Withdrawal schemas
 export const withdrawalSchema = z.object({
@@ -76,6 +91,8 @@ export const withdrawalSchema = z.object({
     browser: z.string().optional(),
     os: z.string().optional(),
   }).optional(),
+  /** Retry an toàn — trùng key trả về cùng bản ghi */
+  idempotencyKey: z.string().min(8).max(128).optional(),
 })
 
 // Product schemas

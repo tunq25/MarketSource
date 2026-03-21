@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { apiGet, apiPost } from "@/lib/api-client"
 import { logger } from "@/lib/logger-client"
 import { cn } from "@/lib/utils"
+import { isStoreMobileNavPath, OPEN_CHAT_WIDGET_EVENT } from "@/lib/mobile-store-nav"
 import type { User as UserType } from "@/types"
 
 interface Message {
@@ -93,6 +94,16 @@ export function ChatWidget() {
 
   useEffect(() => {
     setIsMounted(true)
+  }, [])
+
+  useEffect(() => {
+    const onOpenFromNav = () => {
+      setIsOpen(true)
+      setIsMinimized(false)
+      setUnreadCount(0)
+    }
+    window.addEventListener(OPEN_CHAT_WIDGET_EVENT, onOpenFromNav)
+    return () => window.removeEventListener(OPEN_CHAT_WIDGET_EVENT, onOpenFromNav)
   }, [])
 
   useEffect(() => {
@@ -287,6 +298,7 @@ export function ChatWidget() {
   if (pathname?.startsWith("/admin")) return null
 
   const isAuthenticated = Boolean(currentUser)
+  const liftFabForMobileNav = isStoreMobileNavPath(pathname)
 
   // ============================================================
   // RENDER: MESSAGE BUBBLE
@@ -367,7 +379,14 @@ export function ChatWidget() {
     <>
       {/* ====== FLOATING BUTTON ====== */}
       {!isOpen && (
-        <div className="fixed bottom-6 right-6 z-50">
+        <div
+          className={cn(
+            "fixed right-6 z-50",
+            liftFabForMobileNav
+              ? "bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:bottom-6"
+              : "bottom-6"
+          )}
+        >
           <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-500/40 to-pink-500/40 blur-2xl opacity-80 animate-pulse" />
           <Button
             onClick={handleOpenChat}

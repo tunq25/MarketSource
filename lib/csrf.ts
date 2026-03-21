@@ -49,7 +49,7 @@ export function verifyCSRFToken(token: string, hashedToken: string): boolean {
  */
 export function csrfProtection(request: NextRequest): { valid: boolean; error?: string } {
   // Skip CSRF check cho GET requests (read-only)
-  if (request.method === 'GET' || request.method === 'HEAD') {
+  if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') {
     return { valid: true };
   }
 

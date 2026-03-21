@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { verifyFirebaseToken } from "@/lib/api-auth"
+import { verifyFirebaseToken, requireEmailVerifiedForUser } from "@/lib/api-auth"
 import { getUserById, getUserIdByEmail } from "@/lib/database"
 import { logger } from "@/lib/logger"
 
@@ -18,6 +18,9 @@ export async function GET(request: NextRequest) {
     if (!authUser) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
+
+    const ev = await requireEmailVerifiedForUser(authUser)
+    if (ev) return ev
 
     // 2. Lấy DB ID từ email
     const dbUserId = await getUserIdByEmail(authUser.email || "")

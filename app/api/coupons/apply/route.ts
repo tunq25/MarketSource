@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyFirebaseToken } from '@/lib/api-auth';
+import { verifyFirebaseToken, requireEmailVerifiedForUser } from '@/lib/api-auth';
 import { getUserIdByEmail, query, queryOne, withTransaction } from '@/lib/database';
 import { checkRateLimitAndRespond } from '@/lib/rate-limit';
 import { z } from 'zod';
@@ -33,6 +33,9 @@ export async function POST(request: NextRequest) {
         error: 'Unauthorized'
       }, { status: 401 });
     }
+
+    const ev = await requireEmailVerifiedForUser(authUser);
+    if (ev) return ev;
 
     const userId = await getUserIdByEmail(authUser.email || '');
     if (!userId) {

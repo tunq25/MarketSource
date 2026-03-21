@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
       avatarUrl,
       ipAddress,
       role: 'user',
+      markEmailVerified: true,
     });
 
     if (!result || !result.id) {

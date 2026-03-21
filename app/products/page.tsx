@@ -309,15 +309,15 @@ export default function ProductsPage() {
 
       <FloatingHeader />
 
-      <main className="container mx-auto px-4 pt-24 pb-12 relative z-10">
-        <div className="mb-8 animate-fade-in-down">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+      <main className="container mx-auto px-3 sm:px-4 pt-24 pb-12 relative z-10">
+        <div className="mb-6 sm:mb-8 animate-fade-in-down">
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-4">
             Mã nguồn{" "}
             <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               chất lượng cao
             </span>
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 text-lg">
+          <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-lg">
             Khám phá hàng trăm mã nguồn được tuyển chọn kỹ lưỡng từ các developer hàng đầu
           </p>
         </div>
@@ -408,7 +408,7 @@ export default function ProductsPage() {
         {isLoading ? (
           <ProductSkeletonGrid count={6} />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 md:gap-8">
             {sortedProducts.slice(0, displayCount).map((product, index) => (
               <Card
                 key={product.id}
@@ -444,13 +444,13 @@ export default function ProductsPage() {
 
                 </div>
 
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-purple-400 transition-colors">
+                <CardContent className="p-3 sm:p-6">
+                  <h3 className="text-sm sm:text-xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2 group-hover:text-purple-400 transition-colors line-clamp-2">
                     {product.title}
                   </h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">{product.description}</p>
+                  <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm mb-2 sm:mb-4 line-clamp-2 hidden sm:block">{product.description}</p>
 
-                  <div className="flex flex-wrap gap-2 mb-4">
+                  <div className="hidden sm:flex flex-wrap gap-2 mb-4">
                     {Array.isArray(product.tags) &&
                       product.tags.length > 0 &&
                       product.tags.slice(0, 3).map((tag: any, index: number) => (
@@ -465,28 +465,31 @@ export default function ProductsPage() {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{product.price.toLocaleString("vi-VN")}đ</span>
+                  <div className="flex items-center justify-between mb-2 sm:mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 min-w-0">
+                      <span className="text-base sm:text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums truncate">
+                        {product.price.toLocaleString("vi-VN")}đ
+                      </span>
                       {product.originalPrice > product.price && (
-                        <span className="text-sm text-gray-600 dark:text-gray-400 line-through">
+                        <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 line-through">
                           {product.originalPrice.toLocaleString("vi-VN")}đ
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center text-gray-600 dark:text-gray-400 text-sm">
-                      <Download className="w-4 h-4 mr-1" />
+                    <div className="flex items-center text-gray-600 dark:text-gray-400 text-[10px] sm:text-sm shrink-0">
+                      <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-0.5 sm:mr-1" />
                       {product.downloads}
                     </div>
                   </div>
 
-                  <div className="flex space-x-2">
+                  <div className="flex gap-1.5 sm:gap-2 sm:space-x-2">
                     <Button
                       onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
-                      className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white hover-lift hover-glow animate-gradient"
+                      className="flex-1 min-h-[44px] text-xs sm:text-sm px-2 sm:px-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white hover-lift hover-glow animate-gradient"
                     >
-                      <ShoppingCart className="w-4 h-4 mr-2 group-hover:animate-bounce" />
-                      Mua ngay
+                      <ShoppingCart className="w-4 h-4 sm:mr-2 group-hover:animate-bounce shrink-0" />
+                      <span className="sm:hidden">Mua</span>
+                      <span className="hidden sm:inline">Mua ngay</span>
                     </Button>
                     {product.demoLink && (
                       <Button

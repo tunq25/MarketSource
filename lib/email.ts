@@ -117,6 +117,28 @@ export async function sendEmail(options: EmailOptions) {
   return { success: false, error: 'Tất cả các phương thức gửi email đều thất bại.' };
 }
 
+/** Link xác minh email (đăng ký email/mật khẩu) */
+export async function sendVerificationEmail(email: string, verifyUrl: string) {
+  const siteName = 'QTUS Dev Market';
+  const html = `
+<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"></head>
+<body style="font-family:Segoe UI,sans-serif;background:#f4f4f5;padding:24px;">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;">
+    <h1 style="font-size:18px;margin:0 0 16px;">Xác minh email</h1>
+    <p style="color:#444;line-height:1.6;">Nhấn nút bên dưới để kích hoạt tài khoản ${siteName}.</p>
+    <p style="margin:24px 0;">
+      <a href="${verifyUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Xác minh email</a>
+    </p>
+    <p style="color:#888;font-size:12px;">Link hết hạn sau 7 ngày. Nếu bạn không đăng ký, bỏ qua email này.</p>
+  </div>
+</body></html>`;
+  return sendEmail({
+    to: email,
+    subject: `[${siteName}] Xác minh địa chỉ email`,
+    html,
+  });
+}
+
 // ============================================================
 // 🔐 GỬI OTP QUA EMAIL - TEMPLATE CHUYÊN NGHIỆP
 // ============================================================

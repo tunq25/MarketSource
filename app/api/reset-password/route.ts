@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
-import { findValidPasswordResetToken, consumePasswordResetToken, updateUserPasswordHash, getUserByEmail } from "@/lib/database"
+import { findValidPasswordResetToken, consumePasswordResetToken, updateUserPasswordHash, getUserByEmail, pool } from "@/lib/database"
 import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
@@ -67,6 +67,20 @@ export async function POST(request: NextRequest) {
 
     // ✅ Cập nhật mật khẩu user trong DB
     await updateUserPasswordHash(tokenRecord.user_id, passwordHash);
+
+    try {
+      await pool.query(
+        `UPDATE users SET
+           email_verified_at = COALESCE(email_verified_at, NOW()),
+           email_verification_token = NULL,
+           email_verification_expires = NULL,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [tokenRecord.user_id]
+      );
+    } catch {
+      /* non-critical */
+    }
 
     // ✅ Xóa OTP đã sử dụng (consume)
     await consumePasswordResetToken(otp);

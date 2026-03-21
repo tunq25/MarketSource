@@ -47,6 +47,12 @@ export async function POST(request: NextRequest) {
     const user = await getUserByEmail(email);
 
     if (!user) {
+      if (process.env.NODE_ENV === 'development') {
+        const { logger } = await import('@/lib/logger');
+        logger.warn('[login] 401 — không có user với email này trong DB (kiểm tra đã đăng ký / đúng email)', {
+          email,
+        });
+      }
       return NextResponse.json(
         { success: false, error: 'Email hoặc mật khẩu không chính xác' },
         { status: 401 }
@@ -56,6 +62,10 @@ export async function POST(request: NextRequest) {
     // Verify password
     // ✅ FIX: Tránh account enumeration — không tiết lộ "tài khoản tồn tại nhưng chưa set password"
     if (!user.password_hash) {
+      if (process.env.NODE_ENV === 'development') {
+        const { logger } = await import('@/lib/logger');
+        logger.warn('[login] 401 — user không có password_hash (VD: chỉ đăng nhập OAuth)', { email });
+      }
       return NextResponse.json(
         { success: false, error: 'Email hoặc mật khẩu không chính xác' },
         { status: 401 }
@@ -65,9 +75,25 @@ export async function POST(request: NextRequest) {
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!isPasswordValid) {
+      if (process.env.NODE_ENV === 'development') {
+        const { logger } = await import('@/lib/logger');
+        logger.warn('[login] 401 — sai mật khẩu', { email });
+      }
       return NextResponse.json(
         { success: false, error: 'Email hoặc mật khẩu không chính xác' },
         { status: 401 }
+      );
+    }
+
+    const verifiedAt = (user as { email_verified_at?: string | Date | null }).email_verified_at;
+    if (!verifiedAt) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Vui lòng xác minh email trước khi đăng nhập. Kiểm tra hộp thư hoặc gửi lại email xác minh.',
+          code: 'EMAIL_NOT_VERIFIED',
+        },
+        { status: 403 }
       );
     }
 

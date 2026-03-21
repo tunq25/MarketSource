@@ -1,8 +1,8 @@
 
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getWithdrawals, createWithdrawal, updateWithdrawalStatus, getUserIdByEmail, getUserById, queryOne } from '@/lib/database'
-import { verifyFirebaseToken, requireAdmin, validateRequest } from '@/lib/api-auth'
+import { getWithdrawals, createWithdrawal, updateWithdrawalStatus, getUserIdByEmail, getUserById, queryOne, normalizeUserId } from '@/lib/database'
+import { verifyFirebaseToken, requireAdmin, validateRequest, requireEmailVerifiedForUser } from '@/lib/api-auth'
 import { checkRateLimitAndRespond } from '@/lib/rate-limit'
 import { withdrawalSchema, updateWithdrawalStatusSchema } from '@/lib/validation-schemas'
 import { notifyWithdrawalRequest } from '@/lib/notifications'
@@ -25,6 +25,11 @@ export async function GET(request: NextRequest): Promise<Response> {
     // Verify auth - user chỉ xem được withdrawals của mình, admin xem được tất cả
     const authUser = await verifyFirebaseToken(request);
     const isAdmin = await requireAdmin(request).catch(() => false);
+
+    if (authUser && !isAdmin) {
+      const ev = await requireEmailVerifiedForUser(authUser);
+      if (ev) return ev;
+    }
 
     if (!authUser && !isAdmin) {
       return NextResponse.json({
@@ -85,11 +90,9 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
-    // ✅ FIX: Thêm rate limiting cho withdrawal POST (tránh spam withdrawals)
-    const rateLimitResponse = await checkRateLimitAndRespond(request, 5, 60, 'withdrawals-post');
-    if (rateLimitResponse) return rateLimitResponse;
+    const rateLimitIp = await checkRateLimitAndRespond(request, 40, 60, 'withdrawals-post-ip')
+    if (rateLimitIp) return rateLimitIp
 
-    // Require authentication
     const authUser = await verifyFirebaseToken(request);
     if (!authUser) {
       return NextResponse.json({
@@ -97,6 +100,14 @@ export async function POST(request: NextRequest): Promise<Response> {
         error: 'Unauthorized'
       }, { status: 401 });
     }
+
+    const dbUserIdForRl = await normalizeUserId(authUser.uid, authUser.email || undefined)
+    if (!dbUserIdForRl) {
+      return NextResponse.json({ success: false, error: 'User profile not found' }, { status: 404 })
+    }
+
+    const rateLimitUser = await checkRateLimitAndRespond(request, 5, 60, 'withdrawals-post', dbUserIdForRl)
+    if (rateLimitUser) return rateLimitUser
 
     const body = await request.json();
 
@@ -122,7 +133,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       bankName: withdrawalData.bankName,
       accountNumber: withdrawalData.accountNumber,
       accountName: withdrawalData.accountName,
-      userEmail: authUser.email || undefined
+      userEmail: authUser.email || undefined,
+      idempotencyKey: withdrawalData.idempotencyKey?.trim() || undefined,
     });
 
     // Get the created withdrawal để trả về đầy đủ thông tin

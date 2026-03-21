@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getClientIP } from '@/lib/api-auth';
+import { getClientIP, verifyFirebaseToken, requireEmailVerifiedForUser } from '@/lib/api-auth';
 import { createOrUpdateUser } from '@/lib/database';
 import { logger } from '@/lib/logger';
 import { readJsonBody } from '@/lib/parse-json-body';
@@ -72,6 +72,12 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Unauthorized profile update request' },
         { status: 401 }
       );
+    }
+
+    const authUser = await verifyFirebaseToken(request);
+    if (authUser) {
+      const ev = await requireEmailVerifiedForUser(authUser);
+      if (ev) return ev;
     }
 
     // Lấy IP từ request nếu không có trong body

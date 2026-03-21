@@ -6,7 +6,7 @@ import {
   normalizeUserId,
   getUserIdByEmail,
 } from "@/lib/database"
-import { requireAdmin, validateRequest } from "@/lib/api-auth"
+import { requireAdmin, validateRequest, getClientIP } from "@/lib/api-auth"
 import { userManager } from "@/lib/userManager"
 
 export const runtime = "nodejs"
@@ -23,8 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Require admin authentication
-    await requireAdmin(request);
+    const admin = await requireAdmin(request);
 
     const { depositId, amount, userId, action, userEmail } = await request.json();
 
@@ -152,6 +151,25 @@ export async function POST(request: NextRequest) {
         const { logger } = await import('@/lib/logger');
         logger.warn('Failed to send deposit approval email (non-critical)', { error: emailError, userId: dbUserId });
       }
+
+      try {
+        const { logAdminAction, resolveAdminIdForAudit } = await import('@/lib/audit-logger');
+        const adminId = await resolveAdminIdForAudit({
+          email: admin.email,
+          uid: (admin as { uid?: string }).uid,
+        });
+        await logAdminAction({
+          adminId,
+          adminEmail: admin.email || undefined,
+          action: 'DEPOSIT_APPROVE',
+          targetType: 'deposit',
+          targetId: depositId,
+          details: { userId: dbUserId, amount },
+          ipAddress: getClientIP(request),
+        });
+      } catch {
+        /* non-critical */
+      }
     } else if (action === 'reject') {
       // Normalize userId cho reject action
       const dbUserIdForReject = await normalizeUserId(userId, userEmail);
@@ -178,6 +196,25 @@ export async function POST(request: NextRequest) {
       } catch (notifError) {
         const { logger } = await import('@/lib/logger');
         logger.warn('Failed to create notification (non-critical)', { error: notifError, userId: dbUserIdForReject });
+      }
+
+      try {
+        const { logAdminAction, resolveAdminIdForAudit } = await import('@/lib/audit-logger');
+        const adminId = await resolveAdminIdForAudit({
+          email: admin.email,
+          uid: (admin as { uid?: string }).uid,
+        });
+        await logAdminAction({
+          adminId,
+          adminEmail: admin.email || undefined,
+          action: 'DEPOSIT_REJECT',
+          targetType: 'deposit',
+          targetId: depositId,
+          details: { userId: dbUserIdForReject },
+          ipAddress: getClientIP(request),
+        });
+      } catch {
+        /* non-critical */
       }
     }
 

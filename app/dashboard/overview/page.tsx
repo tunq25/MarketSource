@@ -1,9 +1,7 @@
 "use client"
 
-export const runtime = 'nodejs'
-
 import { useState, useEffect, useMemo, useCallback, useRef, FormEvent, ChangeEvent } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -46,12 +44,134 @@ import { getDeviceInfo, getIPAddress } from "@/lib/auth"
 import { apiGet } from "@/lib/api-client"
 import { logger } from "@/lib/logger-client"
 import { setLocalStorage, getLocalStorage, removeLocalStorage } from "@/lib/localStorage-utils"
-import type { User, Purchase, Deposit, Withdrawal, Notification, SupportTicket, DownloadRecord, ProductReview, DeviceSession, Coupon } from "@/types"
+import type { User, Purchase, Product, Deposit, Withdrawal, Notification, SupportTicket, DownloadRecord, ProductReview, DeviceSession, Coupon } from "@/types"
 import type { UserData } from "@/lib/userManager"
 import Image from "next/image"
 
+/**
+ * Bảng `purchases` không có cột user_email; GET /api/purchases trả về `email` từ JOIN users.
+ * Lọc cũ chỉ so khớp userEmail/user_email nên loại hết bản ghi hợp lệ.
+ */
+function purchaseBelongsToUser(
+  purchase: { user_id?: unknown; userEmail?: string; user_email?: string; email?: string },
+  userEmail: string | undefined,
+  userId: number | string | undefined
+): boolean {
+  if (userId != null && purchase.user_id != null && String(purchase.user_id) === String(userId)) {
+    return true
+  }
+  const a = userEmail?.trim().toLowerCase()
+  const b = (purchase.userEmail || purchase.user_email || purchase.email || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+  return Boolean(a && b && a === b)
+}
+
+/** Row từ GET /api/purchases (sau khi getPurchases JOIN products) → state userPurchases */
+function mapPurchaseApiRowToItem(p: Record<string, unknown>, localPurchases: any[]): Purchase {
+  const id = p.id ?? p.product_id
+  const localP = localPurchases.find((lp) => lp.id === id) || {}
+  const rawImg = (p.image_url ?? p.imageUrl) as string | undefined
+  const productImage = rawImg?.trim() ? rawImg.trim() : "/placeholder.svg"
+  const productDownloadUrl = (p.download_url ?? p.downloadUrl) as string | null | undefined
+  const productDemoUrl = (p.demo_url ?? p.demoUrl) as string | null | undefined
+  const desc = (p.description as string | undefined)?.trim() || ""
+  const cat = (p.category as string | undefined)?.trim()
+  const title = (p.product_title as string) || "Sản phẩm"
+  const created = (p.created_at as string) || new Date().toISOString()
+  const priceNum = Number(p.price ?? p.amount ?? 0)
+  const productMini: Product = {
+    id: Number(p.product_id),
+    title,
+    description: desc || null,
+    price: priceNum,
+    category: cat || null,
+    demoUrl: productDemoUrl ?? null,
+    downloadUrl: productDownloadUrl ?? null,
+    imageUrl: productImage,
+    image: productImage,
+    imageUrls: null,
+    tags: null,
+    isActive: true,
+    isFeatured: false,
+    created_at: created,
+    updated_at: created,
+    downloadCount: 0,
+    averageRating: 0,
+    totalRatings: 0,
+  }
+  return {
+    id: id as Purchase["id"],
+    productId: p.product_id as Purchase["productId"],
+    userId: p.user_id as Purchase["userId"],
+    userEmail: (p.userEmail || p.user_email || p.email) as string | undefined,
+    title,
+    description: desc,
+    price: p.price !== undefined && p.price !== null ? (p.price as number | string) : (p.amount as number | string),
+    amount: (p.amount != null && p.amount !== "" ? p.amount : priceNum) as Purchase["amount"],
+    purchaseDate: created,
+    category: cat || "Uncategorized",
+    image: productImage,
+    imageUrl: productImage,
+    downloadUrl: productDownloadUrl ?? null,
+    downloadLink: productDownloadUrl ?? null,
+    demoUrl: productDemoUrl ?? null,
+    demoLink: productDemoUrl ?? null,
+    product: productMini,
+    downloads: localP.downloads || 0,
+    rating: localP.rating || 0,
+    reviewCount: localP.reviewCount || 0,
+  }
+}
+
+const DASHBOARD_TAB_IDS = [
+  "purchases",
+  "downloads",
+  "wishlist",
+  "reviews",
+  "deposits",
+  "withdrawals",
+  "activity",
+  "analytics",
+  "notifications",
+  "chat",
+  "support",
+  "profile",
+  "security",
+  "referrals",
+  "coupons",
+  "devices",
+] as const
+
+const DASHBOARD_TAB_SET = new Set<string>(DASHBOARD_TAB_IDS)
+
+/** Hash từ link cũ (#deposit) → value Radix Tabs (deposits) */
+const HASH_TO_DASHBOARD_TAB: Record<string, string> = {
+  deposit: "deposits",
+  deposits: "deposits",
+  withdraw: "withdrawals",
+  withdrawal: "withdrawals",
+  withdrawals: "withdrawals",
+  security: "security",
+  purchases: "purchases",
+  downloads: "downloads",
+  wishlist: "wishlist",
+  reviews: "reviews",
+  activity: "activity",
+  analytics: "analytics",
+  notifications: "notifications",
+  chat: "chat",
+  support: "support",
+  profile: "profile",
+  referrals: "referrals",
+  coupons: "coupons",
+  devices: "devices",
+}
+
 export default function DashboardPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: session, status: sessionStatus } = useSession()
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [userPurchases, setUserPurchases] = useState<Purchase[]>([])
@@ -115,6 +235,32 @@ export default function DashboardPage() {
   const [isStartingTwoFactor, setIsStartingTwoFactor] = useState(false)
   const [isVerifyingTwoFactor, setIsVerifyingTwoFactor] = useState(false)
   const [isDisablingTwoFactor, setIsDisablingTwoFactor] = useState(false)
+  const [activeDashboardTab, setActiveDashboardTab] = useState<string>("purchases")
+
+  const onDashboardTabChange = useCallback(
+    (value: string) => {
+      setActiveDashboardTab(value)
+      if (typeof window === "undefined") return
+      const url = new URL(window.location.href)
+      url.searchParams.set("tab", value)
+      url.hash = ""
+      router.replace(url.pathname + url.search, { scroll: false })
+    },
+    [router],
+  )
+
+  useEffect(() => {
+    const t = searchParams.get("tab")
+    if (t && DASHBOARD_TAB_SET.has(t)) {
+      setActiveDashboardTab(t)
+      return
+    }
+    if (typeof window === "undefined") return
+    const h = window.location.hash.replace(/^#/, "").toLowerCase()
+    if (h && HASH_TO_DASHBOARD_TAB[h]) {
+      setActiveDashboardTab(HASH_TO_DASHBOARD_TAB[h])
+    }
+  }, [searchParams])
 
   // Device Session Handlers
   const fetchDeviceSessions = useCallback(async () => {
@@ -267,12 +413,15 @@ export default function DashboardPage() {
     setIsUploadingAvatar(true)
     setProfileMessage(null)
     try {
+      const { getCsrfHeaders } = await import("@/lib/csrf-client")
+      const csrf = await getCsrfHeaders()
       const formData = new FormData()
       formData.append("file", file)
       formData.append("email", currentUser.email)
       const response = await fetch("/api/profile/avatar", {
         method: "POST",
         credentials: "include", // ✅ FIX: Gửi auth-token cookie
+        headers: csrf,
         body: formData,
       })
       const data = await response.json()
@@ -346,14 +495,9 @@ export default function DashboardPage() {
     setTwoFactorBackupCodes([])
     setTwoFactorToken("")
     try {
-      const response = await fetch("/api/profile/2fa/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include", // ✅ FIX: Gửi auth-token cookie
-        body: JSON.stringify({ email: currentUser.email }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
+      const { apiPost } = await import("@/lib/api-client")
+      const data = await apiPost("/api/profile/2fa/setup", { email: currentUser.email })
+      if (!data.success) {
         throw new Error(data.error || "Không thể khởi tạo 2FA")
       }
       setTwoFactorSecret(data.secret)
@@ -370,18 +514,13 @@ export default function DashboardPage() {
     setIsVerifyingTwoFactor(true)
     setProfileMessage(null)
     try {
-      const response = await fetch("/api/profile/2fa/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include", // ✅ FIX: Gửi auth-token cookie
-        body: JSON.stringify({
-          email: currentUser.email,
-          secret: twoFactorSecret,
-          token: twoFactorToken,
-        }),
+      const { apiPost } = await import("@/lib/api-client")
+      const data = await apiPost("/api/profile/2fa/verify", {
+        email: currentUser.email,
+        secret: twoFactorSecret,
+        token: twoFactorToken,
       })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || "Không thể kích hoạt 2FA")
       }
       setTwoFactorBackupCodes(data.backupCodes || [])
@@ -407,14 +546,9 @@ export default function DashboardPage() {
     setIsDisablingTwoFactor(true)
     setProfileMessage(null)
     try {
-      const response = await fetch("/api/profile/2fa/disable", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include", // ✅ FIX: Gửi auth-token cookie
-        body: JSON.stringify({ email: currentUser.email }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data.success) {
+      const { apiPost } = await import("@/lib/api-client")
+      const data = await apiPost("/api/profile/2fa/disable", { email: currentUser.email })
+      if (!data.success) {
         throw new Error(data.error || "Không thể tắt 2FA")
       }
       setSecurityPreferences((prev) => ({
@@ -860,11 +994,8 @@ export default function DashboardPage() {
     async (code: string) => {
       setIsApplyingCoupon(true)
       try {
-        await fetch("/api/coupons/apply", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code }),
-        })
+        const { apiPost } = await import("@/lib/api-client")
+        await apiPost("/api/coupons/apply", { code })
         await loadCoupons(currentUser)
       } catch (error) {
         logger.error("Apply coupon failed", error)
@@ -914,9 +1045,11 @@ export default function DashboardPage() {
       logger.debug('Saving NextAuth session to localStorage');
       const saveOAuthUser = async () => {
         try {
+          const { getCsrfHeaders } = await import('@/lib/csrf-client')
+          const csrf = await getCsrfHeaders()
           const response = await fetch('/api/auth-callback', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...csrf },
             credentials: 'include',
             body: JSON.stringify({
               uid: (session.user as any).id || `social_${Date.now()}`,
@@ -1093,45 +1226,14 @@ export default function DashboardPage() {
               // API trả về { success: true, data: purchases }
               const allPurchases = purchasesResult.data || purchasesResult.purchases || [];
               const userPurchasesList = allPurchases.filter((purchase: any) =>
-                purchase.userEmail === completeUser.email || purchase.user_email === completeUser.email
+                purchaseBelongsToUser(purchase, completeUser.email, completeUser.id)
               );
 
               // Map format để tương thích với UI
               const localPurchases = getLocalStorage<any[]>("userPurchases", []);
-              const mappedPurchases = userPurchasesList.map((p: any) => {
-                const id = p.id || p.product_id;
-                const localP = localPurchases.find(lp => lp.id === id) || {};
-                const productImage = p.image_url || p.imageUrl || '/placeholder.svg';
-                const productDownloadUrl = p.download_url || null;
-                const productDemoUrl = p.demo_url || null;
-                return {
-                  id: id,
-                  productId: p.product_id,
-                  userId: p.user_id,
-                  userEmail: p.userEmail || p.user_email,
-                  title: p.product_title || 'Sản phẩm',
-                  description: p.description || '',
-                  price: typeof p.price !== 'undefined' ? p.price : p.amount,
-                  amount: p.amount,
-                  purchaseDate: p.created_at || new Date().toISOString(),
-                  category: p.category || 'Uncategorized',
-                  image: productImage,
-                  imageUrl: productImage,
-                  downloadUrl: productDownloadUrl,
-                  downloadLink: productDownloadUrl,
-                  demoUrl: productDemoUrl,
-                  demoLink: productDemoUrl,
-                  product: {
-                    id: p.product_id,
-                    imageUrl: productImage,
-                    downloadUrl: productDownloadUrl,
-                    demoUrl: productDemoUrl,
-                  },
-                  downloads: localP.downloads || 0,
-                  rating: localP.rating || 0,
-                  reviewCount: localP.reviewCount || 0
-                };
-              });
+              const mappedPurchases = userPurchasesList.map((p: any) =>
+                mapPurchaseApiRowToItem(p as Record<string, unknown>, localPurchases)
+              );
 
               setUserPurchases(mappedPurchases);
               logger.debug('User purchases loaded from API', { count: mappedPurchases.length });
@@ -1147,13 +1249,13 @@ export default function DashboardPage() {
               try {
                 const allPurchases = getLocalStorage<any[]>("userPurchases", []);
                 const userPurchasesList = allPurchases.filter((purchase: any) => {
-                  // ✅ FIX: So sánh đúng kiểu dữ liệu (string vs number)
                   const purchaseUserId = purchase.userId?.toString();
                   const userUid = completeUser.uid?.toString();
                   const userId = completeUser.id?.toString();
                   return purchaseUserId === userUid ||
                     purchaseUserId === userId ||
-                    purchase.userEmail === completeUser.email;
+                    purchase.userEmail === completeUser.email ||
+                    purchase.email === completeUser.email;
                 });
                 setUserPurchases(userPurchasesList);
               } catch (localError) {
@@ -1456,44 +1558,13 @@ export default function DashboardPage() {
           try {
             const allPurchases = purchasesResult.value.data || purchasesResult.value.purchases || [];
             const userPurchasesList = allPurchases.filter((purchase: any) =>
-              purchase.userEmail === userEmail || purchase.user_email === userEmail
+              purchaseBelongsToUser(purchase, userEmail, currentUser.id)
             );
 
             const localPurchases = getLocalStorage<any[]>("userPurchases", []);
-            const mappedPurchases = userPurchasesList.map((p: any) => {
-              const id = p.id || p.product_id;
-              const localP = localPurchases.find(lp => lp.id === id) || {};
-              const productImage = p.image_url || p.imageUrl || '/placeholder.svg';
-              const productDownloadUrl = p.download_url || null;
-              const productDemoUrl = p.demo_url || null;
-              return {
-                id: id,
-                productId: p.product_id,
-                userId: p.user_id,
-                userEmail: p.userEmail || p.user_email,
-                title: p.product_title || 'Sản phẩm',
-                description: p.description || '',
-                price: typeof p.price !== 'undefined' ? p.price : p.amount,
-                amount: p.amount,
-                purchaseDate: p.created_at || new Date().toISOString(),
-                category: p.category || 'Uncategorized',
-                image: productImage,
-                imageUrl: productImage,
-                downloadUrl: productDownloadUrl,
-                downloadLink: productDownloadUrl,
-                demoUrl: productDemoUrl,
-                demoLink: productDemoUrl,
-                product: {
-                  id: p.product_id,
-                  imageUrl: productImage,
-                  downloadUrl: productDownloadUrl,
-                  demoUrl: productDemoUrl,
-                },
-                downloads: localP.downloads || 0,
-                rating: localP.rating || 0,
-                reviewCount: localP.reviewCount || 0
-              };
-            });
+            const mappedPurchases = userPurchasesList.map((p: any) =>
+              mapPurchaseApiRowToItem(p as Record<string, unknown>, localPurchases)
+            );
 
             if (!abortController.signal.aborted) {
               setUserPurchases(mappedPurchases);
@@ -1825,33 +1896,33 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background relative">
       {/* 3D Liquid Background */}
       <div className="liquid-3d-bg" />
-      {/* 3D Background */}
-      <div className="absolute inset-0">
+      {/* 3D Background — không chặn click vào tab/nội dung phía trên */}
+      <div className="pointer-events-none absolute inset-0 z-0">
         <ThreeJSBackground />
         <ThreeDFallback />
       </div>
 
       <FloatingHeader />
 
-      <main className="container mx-auto px-4 pt-24 pb-8 relative z-10">
+      <main className="container mx-auto px-3 pt-[calc(5.5rem+env(safe-area-inset-top,0px))] pb-10 sm:px-4 sm:pt-24 sm:pb-8 relative z-10">
         <div className="max-w-7xl mx-auto">
           {/* Debug Info - Only show in development */}
           {process.env.NODE_ENV === 'development' && <DebugInfo />}
 
           {/* Header */}
-          <div className="flex items-center justify-between mb-8 animate-fade-in-down">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-              <p className="text-muted-foreground">
+          <div className="mb-8 flex flex-col gap-4 animate-fade-in-down sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Dashboard</h1>
+              <p className="truncate text-sm text-muted-foreground sm:text-base">
                 Chào mừng trở lại, {currentUser.name || currentUser.email}!
               </p>
             </div>
-            <div className="flex items-center space-x-4">
-              <Button variant="outline" onClick={() => router.push("/products")} className="transition-transform hover:scale-105">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:space-x-4 sm:gap-0">
+              <Button variant="outline" onClick={() => router.push("/products")} className="w-full min-h-[44px] justify-center transition-transform hover:scale-105 sm:w-auto">
                 <ShoppingBag className="w-4 h-4 mr-2" />
                 Mua sắm
               </Button>
-              <Button variant="outline" onClick={handleLogout} className="transition-transform hover:scale-105">
+              <Button variant="outline" onClick={handleLogout} className="w-full min-h-[44px] justify-center transition-transform hover:scale-105 sm:w-auto">
                 <LogOut className="w-4 h-4 mr-2" />
                 Đăng xuất
               </Button>
@@ -1859,7 +1930,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 animate-fade-in-up">
+          <div className="grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-2 lg:grid-cols-5 mb-8 animate-fade-in-up">
             <Card className="liquid-glass-card transition-transform hover:scale-105">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 ">
                 <CardTitle className="text-sm font-medium">Số dư hiện tại</CardTitle>
@@ -2101,14 +2172,12 @@ export default function DashboardPage() {
                               </p>
                             </div>
                             <span
-                              className={`ml-2 font-semibold ${item.type === "purchase"
-                                ? "text-blue-600"
-                                : item.type === "deposit"
-                                  ? "text-green-600"
-                                  : "text-red-600"
+                              className={`ml-2 font-semibold ${item.type === "deposit"
+                                ? "text-green-600"
+                                : "text-red-600"
                                 }`}
                             >
-                              {item.type === "withdraw" ? "-" : "+"}
+                              {item.type === "deposit" ? "+" : "-"}
                               {item.amount.toLocaleString("vi-VN")}đ
                             </span>
                           </div>
@@ -2160,78 +2229,80 @@ export default function DashboardPage() {
           </div>
 
           {/* Main Content */}
-          <Tabs defaultValue="purchases" className="space-y-6">
-            <div className="w-full">
-              <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 p-2 h-auto bg-muted/50 backdrop-blur-sm rounded-lg border border-border/50">
-                <TabsTrigger value="purchases" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+          <Tabs value={activeDashboardTab} onValueChange={onDashboardTabChange} className="relative z-10 space-y-6">
+            <div className="w-full overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] md:overflow-visible">
+              <TabsList className="inline-flex min-w-full flex-wrap gap-2 p-2 h-auto bg-muted/50 backdrop-blur-sm rounded-lg border border-border/50 md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                <TabsTrigger value="purchases" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Package className="w-4 h-4 mr-1.5" />
                   <span className="hidden sm:inline">Sản phẩm đã mua</span>
                   <span className="sm:hidden">Sản phẩm</span>
                 </TabsTrigger>
-                <TabsTrigger value="downloads" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="downloads" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Download className="w-4 h-4 mr-1.5" />
                   <span className="hidden sm:inline">Tải xuống</span>
                   <span className="sm:hidden">Tải</span>
                 </TabsTrigger>
-                <TabsTrigger value="wishlist" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="wishlist" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Heart className="w-4 h-4 mr-1.5" />
                   Wishlist
                 </TabsTrigger>
-                <TabsTrigger value="reviews" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="reviews" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Star className="w-4 h-4 mr-1.5" />
                   <span className="hidden sm:inline">Đánh giá</span>
                   <span className="sm:hidden">Đánh giá</span>
                 </TabsTrigger>
-                <TabsTrigger value="deposits" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="deposits" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <TrendingUp className="w-4 h-4 mr-1.5" />
                   <span className="hidden md:inline">Lịch sử nạp tiền</span>
                   <span className="md:hidden">Nạp tiền</span>
                 </TabsTrigger>
-                <TabsTrigger value="withdrawals" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="withdrawals" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <CreditCard className="w-4 h-4 mr-1.5" />
                   <span className="hidden md:inline">Lịch sử rút tiền</span>
                   <span className="md:hidden">Rút tiền</span>
                 </TabsTrigger>
-                <TabsTrigger value="activity" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="activity" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Activity className="w-4 h-4 mr-1.5" />
                   Hoạt động
                 </TabsTrigger>
-                <TabsTrigger value="analytics" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="analytics" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Settings className="w-4 h-4 mr-1.5" />
                   <span className="hidden lg:inline">Analytics cá nhân</span>
                   <span className="lg:hidden">Analytics</span>
                 </TabsTrigger>
-                <TabsTrigger value="notifications" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="notifications" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Bell className="w-4 h-4 mr-1.5" />
                   <span className="hidden sm:inline">Thông báo</span>
                   <span className="sm:hidden">TB</span>
                 </TabsTrigger>
-                <TabsTrigger value="chat" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="chat" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <MessageSquare className="w-4 h-4 mr-1.5" />
-                  Trò chuyện AI/Admin
+                  <span className="hidden sm:inline">Trò chuyện AI/Admin</span>
+                  <span className="sm:hidden">Chat</span>
                 </TabsTrigger>
-                <TabsTrigger value="support" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="support" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <ListChecks className="w-4 h-4 mr-1.5" />
-                  Support Tickets
+                  <span className="hidden sm:inline">Support Tickets</span>
+                  <span className="sm:hidden">Ticket</span>
                 </TabsTrigger>
-                <TabsTrigger value="profile" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="profile" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <UserIcon className="w-4 h-4 mr-1.5" />
                   <span className="hidden lg:inline">Thông tin cá nhân</span>
                   <span className="lg:hidden">Cá nhân</span>
                 </TabsTrigger>
-                <TabsTrigger value="security" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="security" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <ShieldCheck className="w-4 h-4 mr-1.5" />
                   Bảo mật
                 </TabsTrigger>
-                <TabsTrigger value="referrals" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="referrals" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Share2 className="w-4 h-4 mr-1.5" />
                   Referral
                 </TabsTrigger>
-                <TabsTrigger value="coupons" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="coupons" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Star className="w-4 h-4 mr-1.5" />
                   Coupons
                 </TabsTrigger>
-                <TabsTrigger value="devices" className="transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+                <TabsTrigger value="devices" className="min-h-[44px] flex-1 basis-[calc(50%-0.25rem)] justify-center text-xs transition-all hover:scale-105 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md sm:basis-auto sm:text-sm md:min-h-0 md:flex-initial">
                   <Smartphone className="w-4 h-4 mr-1.5" />
                   Thiết bị
                 </TabsTrigger>
@@ -2383,7 +2454,7 @@ export default function DashboardPage() {
                                             const pUserId = p.userId?.toString();
                                             const userId = currentUser.id?.toString();
                                             const userUid = currentUser.uid?.toString();
-                                            return pUserId === userId || pUserId === userUid || p.userEmail === currentUser.email;
+                                            return pUserId === userId || pUserId === userUid || p.userEmail === currentUser.email || p.email === currentUser.email;
                                           }));
                                         }}
                                       >
@@ -2780,7 +2851,7 @@ export default function DashboardPage() {
                           <Badge
                             className={
                               item.type === "purchase"
-                                ? "bg-blue-100 text-blue-800"
+                                ? "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
                                 : item.type === "deposit"
                                   ? "bg-green-100 text-green-800"
                                   : "bg-orange-100 text-orange-800"
@@ -2801,10 +2872,12 @@ export default function DashboardPage() {
                           <div className="text-right">
                             <p
                               className={
-                                item.type === "withdraw" ? "text-red-600 font-semibold" : "text-green-600 font-semibold"
+                                item.type === "deposit"
+                                  ? "text-green-600 font-semibold"
+                                  : "text-red-600 font-semibold"
                               }
                             >
-                              {item.type === "withdraw" ? "-" : "+"}
+                              {item.type === "deposit" ? "+" : "-"}
                               {item.amount.toLocaleString("vi-VN")}đ
                             </p>
                             {item.meta && (

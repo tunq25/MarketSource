@@ -30,6 +30,9 @@ model User {
   lastActivity DateTime? @map("last_activity")
   loginCount   Int       @default(0) @map("login_count")
   referralCode String?   @map("referral_code")
+  emailVerifiedAt          DateTime? @map("email_verified_at")
+  emailVerificationToken   String?   @map("email_verification_token")
+  emailVerificationExpires DateTime? @map("email_verification_expires")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
@@ -181,6 +184,7 @@ model Withdrawal {
   deletedAt     DateTime? @map("deleted_at")
   approvedTime  DateTime? @map("approved_time")
   approvedBy    String?   @map("approved_by")
+  idempotencyKey String?  @map("idempotency_key")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

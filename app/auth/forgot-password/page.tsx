@@ -65,9 +65,12 @@ export default function ForgotPasswordPage() {
     setSuccess("");
 
     try {
+      const { getCsrfHeaders } = await import("@/lib/csrf-client")
+      const csrf = await getCsrfHeaders()
       const response = await fetch("/api/request-password-reset", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrf },
+        credentials: "include",
         body: JSON.stringify({ email: email.trim() }),
       });
 
@@ -133,9 +136,12 @@ export default function ForgotPasswordPage() {
     setSuccess("");
 
     try {
+      const { getCsrfHeaders } = await import("@/lib/csrf-client")
+      const csrf = await getCsrfHeaders()
       const response = await fetch("/api/verify-otp", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrf },
+        credentials: "include",
         body: JSON.stringify({
           email: email.trim(),
           otp: otpString,
@@ -178,9 +184,12 @@ export default function ForgotPasswordPage() {
     setSuccess("");
 
     try {
+      const { getCsrfHeaders } = await import("@/lib/csrf-client")
+      const csrf = await getCsrfHeaders()
       const response = await fetch("/api/reset-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrf },
+        credentials: "include",
         body: JSON.stringify({
           email: email.trim(),
           otp: otpString,

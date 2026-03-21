@@ -117,7 +117,7 @@ export function FloatingHeader() {
       {/* Desktop Header */}
       <header
         className={cn(
-          'hidden md:flex fixed top-4 left-1/2 -translate-x-1/2 z-50',
+          'hidden md:flex fixed top-[max(1rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50',
           'w-full max-w-[1200px] mx-auto px-4',
           'transition-all duration-300 ease-out'
         )}
@@ -237,7 +237,7 @@ export function FloatingHeader() {
       {/* Mobile Header */}
       <header
         className={cn(
-          'md:hidden fixed top-4 left-1/2 -translate-x-1/2 z-50',
+          'md:hidden fixed top-[max(1rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50',
           'w-[calc(100%-32px)] max-w-[600px]',
           'transition-all duration-300 ease-out'
         )}

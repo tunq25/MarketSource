@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDeposits, createDeposit, updateDepositStatus, approveDepositAndUpdateBalance, getUserIdByEmail, getUserById, queryOne, createNotification } from '@/lib/database'
-import { verifyFirebaseToken, requireAdmin, validateRequest } from '@/lib/api-auth'
+import {
+  getDeposits,
+  createDeposit,
+  updateDepositStatus,
+  approveDepositAndUpdateBalance,
+  getUserIdByEmail,
+  getUserById,
+  queryOne,
+  createNotification,
+  normalizeUserId,
+} from '@/lib/database'
+import { verifyFirebaseToken, requireAdmin, validateRequest, requireEmailVerifiedForUser } from '@/lib/api-auth'
 import { checkRateLimitAndRespond } from '@/lib/rate-limit'
 import { depositSchema, updateDepositStatusSchema } from '@/lib/validation-schemas'
 import { notifyDepositRequest } from '@/lib/notifications'
@@ -20,6 +30,11 @@ export async function GET(request: NextRequest): Promise<Response> {
 
     const authUser = await verifyFirebaseToken(request);
     const isAdmin = await requireAdmin(request).catch(() => false);
+
+    if (authUser && !isAdmin) {
+      const ev = await requireEmailVerifiedForUser(authUser);
+      if (ev) return ev;
+    }
 
     if (!authUser && !isAdmin) {
       return NextResponse.json({
@@ -62,8 +77,8 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 export async function POST(request: NextRequest): Promise<Response> {
   try {
-    const rateLimitResponse = await checkRateLimitAndRespond(request, 5, 60, 'deposits-post');
-    if (rateLimitResponse) return rateLimitResponse;
+    const rateLimitIp = await checkRateLimitAndRespond(request, 40, 60, 'deposits-post-ip')
+    if (rateLimitIp) return rateLimitIp
 
     const authUser = await verifyFirebaseToken(request);
     if (!authUser) {
@@ -72,6 +87,17 @@ export async function POST(request: NextRequest): Promise<Response> {
         error: 'Unauthorized'
       }, { status: 401 });
     }
+
+    const evPost = await requireEmailVerifiedForUser(authUser);
+    if (evPost) return evPost;
+
+    const dbUserIdForRl = await normalizeUserId(authUser.uid, authUser.email || undefined)
+    if (!dbUserIdForRl) {
+      return NextResponse.json({ success: false, error: 'User profile not found' }, { status: 404 })
+    }
+
+    const rateLimitUser = await checkRateLimitAndRespond(request, 5, 60, 'deposits-post', dbUserIdForRl)
+    if (rateLimitUser) return rateLimitUser
 
     const body = await request.json();
 
@@ -88,10 +114,16 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     const dbUserIdToken = authUser.uid;
 
-    if (depositData.transactionId) {
+    const effectiveTxnId = (
+      depositData.transactionId?.trim() ||
+      depositData.idempotencyKey?.trim() ||
+      ''
+    )
+
+    if (effectiveTxnId) {
       const existingDeposit = await queryOne<any>(
         'SELECT id FROM deposits WHERE transaction_id = $1',
-        [depositData.transactionId]
+        [effectiveTxnId]
       );
       if (existingDeposit) {
         return NextResponse.json({
@@ -105,7 +137,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       userId: dbUserIdToken,
       amount: depositData.amount,
       method: depositData.method,
-      transactionId: depositData.transactionId,
+      transactionId: effectiveTxnId,
       userEmail: authUser.email || undefined,
       userName: undefined
     });
@@ -123,7 +155,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       userEmail: authUser.email || undefined,
       amount: depositData.amount,
       method: depositData.method,
-      transactionId: depositData.transactionId,
+      transactionId: effectiveTxnId,
       ipAddress: depositData.ipAddress,
       deviceInfo: depositData.deviceInfo,
     };

@@ -265,6 +265,37 @@ export async function requireAuth(request: NextRequest) {
 }
 
 /**
+ * User thường phải có email đã xác minh (OAuth / verify link). Admin bypass.
+ */
+export async function requireEmailVerifiedForUser(
+  authUser: { email: string | null } | null
+): Promise<NextResponse | null> {
+  if (!authUser?.email) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
+  const { getUserByEmail } = await import('@/lib/database');
+  const u = await getUserByEmail(authUser.email);
+  if (!u) {
+    return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+  }
+  if (u.role === 'admin' || u.role === 'superadmin') {
+    return null;
+  }
+  const verified = (u as { email_verified_at?: string | Date | null }).email_verified_at;
+  if (!verified) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Vui lòng xác minh email trước khi tiếp tục.',
+        code: 'EMAIL_NOT_VERIFIED',
+      },
+      { status: 403 }
+    );
+  }
+  return null;
+}
+
+/**
  * Require admin authentication
  * Kiểm tra cả Firebase token và admin token (JWT)
  */
@@ -312,7 +343,7 @@ export async function requireAdmin(request: NextRequest) {
   const adminIdentity = await validateAdminToken(tokenFromCookie || tokenFromHeader);
 
   // Check CSRF for sensitive actions
-  if (['POST', 'PUT', 'DELETE'].includes(request.method)) {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
     const csrfHeader = request.headers.get('X-CSRF-Token');
     const csrfCookie = request.cookies.get('csrf-token')?.value;
     

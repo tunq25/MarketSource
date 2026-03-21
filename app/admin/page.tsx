@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 export const runtime = 'nodejs'
 
@@ -7,9 +7,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { LoadingSpinner } from "@/components/LoadingSpinner"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Shield, LogOut, LayoutDashboard, BarChart3, Package, Users, Wallet, ArrowDownUp, Receipt, Star, MessageSquare, Headphones, Bell, Settings, Megaphone, HelpCircle, FileText, Gift, FileBarChart, Database, Palette } from 'lucide-react'
 import { Logo } from "@/components/logo"
 import {
@@ -1999,16 +2000,16 @@ Hệ thống thông báo đang hoạt động bình thường.`
         <main className="flex-1">
           {/* Header */}
           <header className="border-b border-slate-200 dark:border-white/5 glass-panel">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-              <div className="flex items-center gap-3">
-                <div className="md:hidden">
+            <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="shrink-0 md:hidden">
                   <Logo />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs uppercase tracking-[0.18em] text-sky-500 dark:text-sky-400">
                     Admin control
                   </p>
-                  <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50 text-glow">
+                  <h1 className="truncate text-lg font-semibold text-slate-900 dark:text-slate-50 text-glow sm:text-xl">
                     Xin chào, {adminUser.name}
                   </h1>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -2016,7 +2017,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:gap-3">
                 <Badge className="bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40">
                   <Shield className="mr-1 h-3 w-3" />
                   Admin
@@ -2034,9 +2035,39 @@ Hệ thống thông báo đang hoạt động bình thường.`
               </div>
             </div>
 
+            {/* Điều hướng nhanh — chỉ mobile (sidebar ẩn trên md) */}
+            <div className="mx-auto max-w-6xl px-4 pb-3 md:hidden">
+              <Select value={activeTab} onValueChange={setActiveTab}>
+                <SelectTrigger className="h-12 w-full border-slate-200 bg-white text-left text-base dark:border-slate-700 dark:bg-slate-900">
+                  <SelectValue placeholder="Chọn mục quản trị" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[min(70vh,28rem)]">
+                  <SelectItem value="overview">Tổng quan</SelectItem>
+                  <SelectItem value="analytics">Analytics</SelectItem>
+                  <SelectItem value="products">Sản phẩm</SelectItem>
+                  <SelectItem value="users">Người dùng</SelectItem>
+                  <SelectItem value="deposits">Nạp tiền</SelectItem>
+                  <SelectItem value="withdrawals">Rút tiền</SelectItem>
+                  <SelectItem value="transactions">Giao dịch</SelectItem>
+                  <SelectItem value="reviews">Đánh giá</SelectItem>
+                  <SelectItem value="chat">Chat</SelectItem>
+                  <SelectItem value="support">Hỗ trợ</SelectItem>
+                  <SelectItem value="notifications">Thông báo</SelectItem>
+                  <SelectItem value="settings">Cài đặt</SelectItem>
+                  <SelectItem value="appearance">Giao diện</SelectItem>
+                  <SelectItem value="announcements">Thông báo hệ thống</SelectItem>
+                  <SelectItem value="faq">FAQ</SelectItem>
+                  <SelectItem value="audit">Audit</SelectItem>
+                  <SelectItem value="promotions">Khuyến mãi</SelectItem>
+                  <SelectItem value="reports">Báo cáo</SelectItem>
+                  <SelectItem value="backup">Backup &amp; Restore</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Hàng thẻ thống kê nhanh */}
             <div className="mx-auto max-w-6xl px-4 pb-4">
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
                   <CardHeader className="pb-2">
                     <CardDescription className="text-xs text-slate-500 dark:text-slate-400">
@@ -2095,7 +2126,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
           </header>
 
           {/* Nội dung chính theo tab */}
-          <section className="mx-auto max-w-6xl px-4 py-6">
+          <section className="mx-auto max-w-6xl px-3 py-5 sm:px-4 sm:py-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
               <TabsContent value="overview">
                 <Overview

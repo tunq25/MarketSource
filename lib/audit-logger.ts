@@ -11,6 +11,25 @@ export interface AuditLogData {
   ipAddress?: string;
 }
 
+/** Lấy id admin trong DB từ session/token (email hoặc uid số) */
+export async function resolveAdminIdForAudit(admin: {
+  email?: string | null;
+  uid?: string | number | null;
+}): Promise<number> {
+  try {
+    if (admin.email) {
+      const { getUserIdByEmail } = await import('./database');
+      const id = await getUserIdByEmail(admin.email);
+      if (id) return id;
+    }
+    const u = admin.uid;
+    if (u != null && /^\d+$/.test(String(u))) return parseInt(String(u), 10);
+  } catch {
+    /* ignore */
+  }
+  return 0;
+}
+
 /**
  * Log an admin action to the database
  */

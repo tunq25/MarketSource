@@ -207,17 +207,26 @@ export async function apiRequest(
 ): Promise<any> {
   try {
     const headers = await getAuthHeaders();
+    const method = (options.method || 'GET').toUpperCase();
+    const isMutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    const apiPath =
+      typeof window !== 'undefined'
+        ? (() => {
+            try {
+              return new URL(endpoint, window.location.origin).pathname
+            } catch {
+              return endpoint
+            }
+          })()
+        : endpoint
 
-    // ✅ SECURITY FIX: Thêm CSRF token cho admin routes
-    if (typeof window !== 'undefined' && endpoint.includes('/admin')) {
-      // ✅ FIX: Get token directly because JSON.parse in getLocalStorage fails on raw string tokens
-      let csrfToken = window.localStorage.getItem('csrf-token');
-      if (csrfToken) {
-        // Remove surrounding quotes if they exist (backward compatibility with setLocalStorage)
-        if (csrfToken.startsWith('"') && csrfToken.endsWith('"') && csrfToken.length >= 2) {
-          csrfToken = csrfToken.slice(1, -1);
-        }
-        (headers as Record<string, string>)['X-CSRF-Token'] = csrfToken;
+    if (typeof window !== 'undefined' && isMutating && apiPath.startsWith('/api/')) {
+      try {
+        const { getCsrfHeaders } = await import('@/lib/csrf-client');
+        const csrf = await getCsrfHeaders();
+        Object.assign(headers as Record<string, string>, csrf);
+      } catch (e) {
+        logger.warn('CSRF merge failed', { error: e });
       }
     }
 

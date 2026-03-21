@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { query, getUserById, getUserByEmail, createOrUpdateUser, getUserIdByEmail } from "@/lib/database"
-import { verifyFirebaseToken, requireAdmin } from "@/lib/api-auth"
+import { verifyFirebaseToken, requireAdmin, getClientIP, requireEmailVerifiedForUser } from "@/lib/api-auth"
 import { logger } from "@/lib/logger"
 
 export const runtime = 'nodejs'
@@ -123,7 +123,19 @@ export async function PUT(request: NextRequest) {
     }
 
     const currentUserId = await getUserIdByEmail(authUser.email || '')
-    const isAdmin = await requireAdmin(request).catch(() => false)
+    let isAdmin = false
+    let adminSession: Awaited<ReturnType<typeof requireAdmin>> | null = null
+    try {
+      adminSession = await requireAdmin(request)
+      isAdmin = true
+    } catch {
+      isAdmin = false
+    }
+
+    if (!isAdmin) {
+      const ev = await requireEmailVerifiedForUser(authUser)
+      if (ev) return ev
+    }
 
     if (!isAdmin && currentUserId !== userIdNum) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
@@ -143,12 +155,43 @@ export async function PUT(request: NextRequest) {
       avatarUrl: userData.avatar_url,
     };
 
+    const previousRole = currentUser.role || 'user';
+
     // Chỉ admin mới được update role
     if (isAdmin && userData.role) {
       updateData.role = userData.role;
     }
 
     await createOrUpdateUser(updateData)
+
+    if (
+      isAdmin &&
+      adminSession &&
+      userData.role &&
+      String(previousRole) !== String(userData.role)
+    ) {
+      try {
+        const { logAdminAction, resolveAdminIdForAudit } = await import('@/lib/audit-logger');
+        const adminId = await resolveAdminIdForAudit({
+          email: adminSession.email,
+          uid: (adminSession as { uid?: string }).uid,
+        });
+        await logAdminAction({
+          adminId,
+          adminEmail: adminSession.email || undefined,
+          action: 'USER_ROLE_CHANGE',
+          targetType: 'user',
+          targetId: userIdNum,
+          details: {
+            from: previousRole,
+            to: userData.role,
+          },
+          ipAddress: getClientIP(request),
+        });
+      } catch (e) {
+        logger.warn('Audit log failed (role change)', { error: e });
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

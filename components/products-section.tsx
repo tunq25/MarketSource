@@ -245,7 +245,7 @@ export function ProductsSection() {
         </div>
 
         <motion.div
-          className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
+          className="mt-14 grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-2 lg:grid-cols-3"
           variants={gridVariants}
           initial="hidden"
           whileInView="show"
@@ -271,7 +271,7 @@ export function ProductsSection() {
                 })}
               >
                 <div className="relative rounded-[28px] bg-white/90 dark:bg-gray-950/80">
-                  <div className="relative h-56 overflow-hidden rounded-t-[28px]">
+                  <div className="relative h-36 sm:h-48 md:h-56 overflow-hidden rounded-t-[28px]">
                     <Image src={imageSrc} alt={product.title} fill className="object-cover transition duration-700 group-hover:scale-110" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-60" />
                     {product.featured && (
@@ -292,13 +292,13 @@ export function ProductsSection() {
                     </div>
                   </div>
 
-                  <div className="space-y-4 px-6 py-6">
-                    <h3 className="text-xl font-semibold text-gray-900 transition group-hover:text-purple-500 dark:text-white line-clamp-2">
+                  <div className="space-y-2 sm:space-y-4 px-3 py-4 sm:px-6 sm:py-6">
+                    <h3 className="text-sm sm:text-xl font-semibold text-gray-900 transition group-hover:text-purple-500 dark:text-white line-clamp-2">
                       {product.title}
                     </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{product.description}</p>
+                    <p className="hidden sm:block text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{product.description}</p>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="hidden sm:flex flex-wrap gap-2">
                       {Array.isArray(product.tags) &&
                         product.tags.slice(0, 3).map(tag => (
                           <span
@@ -315,30 +315,31 @@ export function ProductsSection() {
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="min-w-0">
+                        <span className="text-base sm:text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
                           {priceValue.toLocaleString("vi-VN")}đ
                         </span>
                         {originalPriceValue && originalPriceValue > priceValue && (
-                          <span className="ml-2 text-sm text-gray-500 line-through">
+                          <span className="ml-1 sm:ml-2 text-xs sm:text-sm text-gray-500 line-through">
                             {originalPriceValue.toLocaleString("vi-VN")}đ
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-300">
-                        <Download className="mr-2 h-4 w-4" />
+                      <div className="flex items-center shrink-0 text-[10px] sm:text-sm text-gray-500 dark:text-gray-300">
+                        <Download className="mr-0.5 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
                         {downloadsValue}
                       </div>
                     </div>
 
-                    <div className="flex gap-3">
+                    <div className="flex gap-2 sm:gap-3">
                       <Button
                         onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
-                        className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg shadow-purple-500/30 transition hover:translate-y-0.5 hover:shadow-purple-500/60"
+                        className="flex-1 min-h-[44px] text-xs sm:text-sm bg-gradient-to-r from-purple-600 to-pink-600 shadow-lg shadow-purple-500/30 transition hover:translate-y-0.5 hover:shadow-purple-500/60 px-2 sm:px-4"
                       >
-                        <ShoppingCart className="mr-2 h-4 w-4" />
-                        Mua ngay
+                        <ShoppingCart className="mr-1 sm:mr-2 h-4 w-4 shrink-0" />
+                        <span className="sm:hidden">Mua</span>
+                        <span className="hidden sm:inline">Mua ngay</span>
                       </Button>
                       {demoLink && (
                         <Button

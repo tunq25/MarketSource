@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Eye, ArrowLeft, EyeOff, Mail, Lock, Github } from "lucide-react"
+import { Eye, ArrowLeft, EyeOff, Mail, Lock } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { signIn, useSession } from "next-auth/react"
@@ -14,22 +14,6 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { logger } from "@/lib/logger-client"
 import type { UserSyncResult } from "@/lib/userManager"
 import PowCaptcha from "@/components/PowCaptcha"
-
-// Social login icons (placeholder - replace with actual icons)
-const GoogleIcon = () => (
-  <svg className="w-5 h-5" viewBox="0 0 24 24">
-    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-  </svg>
-)
-
-const FacebookIcon = () => (
-  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#1877F2">
-    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-  </svg>
-)
 
 function LoginPageContent() {
   const router = useRouter()
@@ -45,6 +29,11 @@ function LoginPageContent() {
   const [error, setError] = useState("")
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [rememberMe, setRememberMe] = useState(false)
+  const [oauthProviders, setOauthProviders] = useState<{
+    google: boolean
+    github: boolean
+    facebook: boolean
+  } | null>(null)
 
   useEffect(() => {
     try {
@@ -53,6 +42,29 @@ function LoginPageContent() {
       }
     } catch {
       /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/auth/providers")
+      .then((r) => r.json())
+      .then((data: { google?: boolean; github?: boolean; facebook?: boolean }) => {
+        if (!cancelled) {
+          setOauthProviders({
+            google: !!data.google,
+            github: !!data.github,
+            facebook: !!data.facebook,
+          })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOauthProviders({ google: false, github: false, facebook: false })
+        }
+      })
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -110,9 +122,11 @@ function LoginPageContent() {
             // Ignore IP fetch errors
           }
 
+          const { getCsrfHeaders } = await import('@/lib/csrf-client')
+          const csrf = await getCsrfHeaders()
           const response = await fetch('/api/auth-callback', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...csrf },
             credentials: 'include',
             body: JSON.stringify({
               uid: (session.user as any).id || `social_${Date.now()}`,
@@ -168,32 +182,23 @@ function LoginPageContent() {
     setFormData(prev => ({ ...prev, [name]: value }))
     if (error) setError("")
   }
-  const handleSocialLogin = async (provider: string) => {
+  // OAuth: bắt buộc redirect (mặc định) để trình duyệt chuyển tới Google/GitHub/Facebook. redirect:false khiến OAuth không mở được.
+  const handleSocialLogin = async (provider: "google" | "github" | "facebook") => {
     try {
-      setIsLoading(true);
-      setError("");
-      logger.debug(`Attempting ${provider} login`);
-
-      const result = await signIn(provider, {
-        callbackUrl: '/dashboard',
-        redirect: false  // Don't auto redirect, we'll handle it in useEffect
-      });
-
-      if (result?.error) {
-        logger.error(`Social login error (${provider})`, { error: result.error });
-        setError(`Lỗi đăng nhập bằng ${provider}. Vui lòng thử lại.`);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!result?.ok) {
-        setError(`Không thể đăng nhập bằng ${provider}.`);
-        setIsLoading(false);
-      }
-    } catch (error: any) {
-      logger.error(`Social login error (${provider})`, error);
-      setError(`Lỗi đăng nhập bằng ${provider}. Vui lòng kiểm tra lại cấu hình OAuth.`);
-      setIsLoading(false);
+      setIsLoading(true)
+      setError("")
+      logger.debug(`Attempting ${provider} login`)
+      const callbackUrl =
+        searchParams.get("returnUrl") ||
+        searchParams.get("callbackUrl") ||
+        "/dashboard"
+      await signIn(provider, { callbackUrl })
+    } catch (error: unknown) {
+      logger.error(`Social login error (${provider})`, error)
+      setError(
+        `Không thể mở đăng nhập ${provider}. Kiểm tra NEXTAUTH_URL, Client ID/Secret trong .env và callback URL trên console nhà cung cấp.`,
+      )
+      setIsLoading(false)
     }
   }
 
@@ -236,11 +241,15 @@ function LoginPageContent() {
         throw new Error("Vui lòng xác minh bạn không phải robot");
       }
 
+      const { getCsrfHeaders } = await import('@/lib/csrf-client')
+      const csrf = await getCsrfHeaders()
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...csrf,
         },
+        credentials: 'include',
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
@@ -254,6 +263,11 @@ function LoginPageContent() {
       const data = await response.json();
 
       if (!response.ok) {
+        if (data?.code === 'EMAIL_NOT_VERIFIED') {
+          router.replace(`/auth/verify-email?email=${encodeURIComponent(formData.email)}`)
+          setIsLoading(false)
+          return
+        }
         throw new Error(data.error || 'Something went wrong');
       }
 
@@ -264,8 +278,11 @@ function LoginPageContent() {
 
       // Save user info via userManager để đảm bảo sync đầy đủ
       const { userManager } = await import('@/lib/userManager');
+      const numericId =
+        typeof data.user.id === "number" ? data.user.id : Number(data.user.id)
       const normalizedUser = {
-        uid: data.user.uid || data.user.id,
+        id: Number.isFinite(numericId) ? numericId : undefined,
+        uid: String(data.user.uid ?? data.user.id),
         email: data.user.email,
         displayName: data.user.displayName || data.user.name,
         name: data.user.name || data.user.displayName,
@@ -333,26 +350,104 @@ function LoginPageContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Social Login Buttons */}
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+              {error}
+            </div>
+          )}
 
+          {oauthProviders &&
+            (oauthProviders.google || oauthProviders.github || oauthProviders.facebook) && (
+              <div className="space-y-3">
+                <p className="text-center text-sm font-medium text-muted-foreground">Đăng nhập nhanh</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isLoading || !oauthProviders.google}
+                    title={
+                      !oauthProviders.google
+                        ? "Thêm GOOGLE_CLIENT_ID và GOOGLE_CLIENT_SECRET vào .env"
+                        : "Đăng nhập bằng Google"
+                    }
+                    onClick={() => handleSocialLogin("google")}
+                    className="flex min-h-[44px] items-center justify-center gap-2"
+                  >
+                    <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden>
+                      <path
+                        fill="currentColor"
+                        d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.854L12.545,10.239z"
+                      />
+                    </svg>
+                    Google
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isLoading || !oauthProviders.facebook}
+                    title={
+                      !oauthProviders.facebook
+                        ? "Thêm FACEBOOK_CLIENT_ID và FACEBOOK_CLIENT_SECRET vào .env"
+                        : "Đăng nhập bằng Facebook"
+                    }
+                    onClick={() => handleSocialLogin("facebook")}
+                    className="flex min-h-[44px] items-center justify-center gap-2"
+                  >
+                    <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden>
+                      <path
+                        fill="currentColor"
+                        d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103v3.333h-2.344c-.776 0-1.133.407-1.133 1.135v1.987h3.477l-.525 3.667h-2.952v7.98h-2.824z"
+                      />
+                    </svg>
+                    Facebook
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isLoading || !oauthProviders.github}
+                    title={
+                      !oauthProviders.github
+                        ? "Thêm GITHUB_CLIENT_ID và GITHUB_CLIENT_SECRET vào .env"
+                        : "Đăng nhập bằng GitHub"
+                    }
+                    onClick={() => handleSocialLogin("github")}
+                    className="flex min-h-[44px] items-center justify-center gap-2"
+                  >
+                    <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden>
+                      <path
+                        fill="currentColor"
+                        d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.13-1.47-1.13-1.47-.92-.63.07-.62.07-.62 1.02.07 1.56 1.05 1.56 1.05.91 1.56 2.39 1.11 2.98.85.09-.66.36-1.11.66-1.37-2.31-.26-4.74-1.16-4.74-5.16 0-1.14.41-2.07 1.08-2.8-.11-.26-.47-1.32.1-2.75 0 0 .88-.28 2.88 1.07a10.02 10.02 0 0 1 5.28 0c2-1.35 2.88-1.07 2.88-1.07.57 1.43.21 2.49.1 2.75.67.73 1.08 1.66 1.08 2.8 0 4.01-2.44 4.9-4.76 5.16.37.32.7.95.7 1.92v2.85c0 .27.16.58.67.5A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z"
+                      />
+                    </svg>
+                    GitHub
+                  </Button>
+                </div>
+              </div>
+            )}
+
+          {oauthProviders &&
+            !oauthProviders.google &&
+            !oauthProviders.github &&
+            !oauthProviders.facebook && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                Chưa bật đăng nhập mạng xã hội. Cấu hình <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/60">GOOGLE_CLIENT_ID</code>,{" "}
+                <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/60">GITHUB_CLIENT_ID</code>,{" "}
+                <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/60">FACEBOOK_CLIENT_ID</code> trong{" "}
+                <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/60">.env</code> — hoặc đăng nhập bằng email đã đăng ký bên dưới.
+              </p>
+            )}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <Separator />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Nhập tài khoản của bạn</span>
+              <span className="bg-background px-2 text-muted-foreground">Hoặc email đã đăng ký</span>
             </div>
           </div>
 
-          {/* Email/Password Form */}
+          {/* Email + mật khẩu (PostgreSQL /api/login + cookie auth-token) */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
-                {error}
-              </div>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -442,64 +537,9 @@ function LoginPageContent() {
               Chưa có tài khoản? Đăng ký ngay.
             </Link>
           </div>
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-gray-300 dark:border-gray-600" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                Hoặc đăng nhập với
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              variant="outline"
-              disabled={isLoading}
-              onClick={() => handleSocialLogin('google')}
-              className="flex items-center justify-center"
-            >
-              <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.854L12.545,10.239z"
-                />
-              </svg>
-              Google
-            </Button>
-            <Button
-              variant="outline"
-              disabled={isLoading}
-              onClick={() => handleSocialLogin('facebook')}
-              className="flex items-center justify-center"
-            >
-              <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103v3.333h-2.344c-.776 0-1.133.407-1.133 1.135v1.987h3.477l-.525 3.667h-2.952v7.98h-2.824z"
-                />
-              </svg>
-              Facebook
-            </Button>
-            <Button
-              variant="outline"
-              disabled={isLoading}
-              onClick={() => handleSocialLogin('github')}
-              className="flex items-center justify-center"
-            >
-              <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.13-1.47-1.13-1.47-.92-.63.07-.62.07-.62 1.02.07 1.56 1.05 1.56 1.05.91 1.56 2.39 1.11 2.98.85.09-.66.36-1.11.66-1.37-2.31-.26-4.74-1.16-4.74-5.16 0-1.14.41-2.07 1.08-2.8-.11-.26-.47-1.32.1-2.75 0 0 .88-.28 2.88 1.07a10.02 10.02 0 0 1 5.28 0c2-1.35 2.88-1.07 2.88-1.07.57 1.43.21 2.49.1 2.75.67.73 1.08 1.66 1.08 2.8 0 4.01-2.44 4.9-4.76 5.16.37.32.7.95.7 1.92v2.85c0 .27.16.58.67.5A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z"
-                />
-              </svg>
-              GitHub
-            </Button>
-          </div>
           <div className="text-center">
             <Link href="/admin/login" className="text-sm text-purple-600 hover:text-purple-500">
-              Bạn là admin?. Đăng nhập admin ngay.
+              Bạn là admin? Đăng nhập admin.
             </Link>
           </div>
           <div>

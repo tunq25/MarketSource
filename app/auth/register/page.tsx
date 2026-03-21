@@ -103,9 +103,11 @@ function RegisterPageContent() {
             // Ignore IP fetch errors
           }
 
+          const { getCsrfHeaders } = await import('@/lib/csrf-client')
+          const csrf = await getCsrfHeaders()
           const response = await fetch('/api/auth-callback', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...csrf },
             credentials: 'include',
             body: JSON.stringify({
               uid: (session.user as any).id || `social_${Date.now()}`,
@@ -172,23 +174,16 @@ function RegisterPageContent() {
     if (error) setError("")
   }
 
-  const handleSocialLogin = async (provider: string) => {
+  const handleSocialLogin = async (provider: "google" | "github" | "facebook") => {
     try {
-      setIsLoading(true);
-      setError("");
-      logger.debug(`Attempting ${provider} registration`);
-
-      await signIn(provider, {
-        callbackUrl: '/dashboard',
-        redirect: false  // Don't auto redirect, we'll handle it in useEffect
-      });
-
-      // Note: signIn sẽ redirect tự động nếu success
-      // Nếu có lỗi, sẽ được handle trong useEffect với searchParams.error
-    } catch (error: any) {
-      logger.error(`Social registration error (${provider})`, error);
-      setError(`Lỗi đăng ký bằng ${provider}. Vui lòng kiểm tra lại cấu hình OAuth.`);
-      setIsLoading(false);
+      setIsLoading(true)
+      setError("")
+      logger.debug(`Attempting ${provider} registration`)
+      await signIn(provider, { callbackUrl: "/dashboard" })
+    } catch (error: unknown) {
+      logger.error(`Social registration error (${provider})`, error)
+      setError(`Lỗi đăng ký bằng ${provider}. Kiểm tra NEXTAUTH_URL và OAuth trong .env.`)
+      setIsLoading(false)
     }
   }
 
@@ -210,11 +205,15 @@ function RegisterPageContent() {
         throw new Error("Vui lòng xác minh bạn không phải robot")
       }
 
+      const { getCsrfHeaders } = await import('@/lib/csrf-client')
+      const csrf = await getCsrfHeaders()
       const response = await fetch('/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...csrf,
         },
+        credentials: 'include',
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,

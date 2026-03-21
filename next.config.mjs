@@ -134,6 +134,13 @@ const nextConfig = {
       },
     ]
   },
+  // Các link cũ /login, /register → đúng route App Router
+  async redirects() {
+    return [
+      { source: '/login', destination: '/auth/login', permanent: false },
+      { source: '/register', destination: '/auth/register', permanent: false },
+    ]
+  },
   // ✅ FIX: Redirects để xử lý các requests không tồn tại
   async rewrites() {
     return [

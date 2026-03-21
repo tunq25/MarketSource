@@ -133,7 +133,9 @@ export default function CartPage() {
       
       // ✅ BUG #26 FIX: Sử dụng Bulk Purchase API thay vì vòng lặp N+1
       const token = getLocalStorage<string | null>('firebaseToken', null) || getLocalStorage<string | null>('authToken', null);
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      const { getCsrfHeaders } = await import('@/lib/csrf-client')
+      const csrf = await getCsrfHeaders()
+      const headers: HeadersInit = { 'Content-Type': 'application/json', ...csrf };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -141,6 +143,7 @@ export default function CartPage() {
       const response = await fetch('/api/purchases/bulk', {
         method: 'POST',
         headers,
+        credentials: 'include',
         body: JSON.stringify({
           userId: currentUser.uid || currentUser.id,
           items: cartItems.map(item => ({

@@ -19,6 +19,25 @@ interface Notification {
   created_at: string
 }
 
+const KNOWN_TYPES = new Set(['system', 'deposit', 'withdraw', 'chat', 'promotion'])
+
+function normalizeNotificationRow(raw: Record<string, unknown>): Notification {
+  const typeRaw = String(raw.type ?? 'system').toLowerCase()
+  const type = (KNOWN_TYPES.has(typeRaw) ? typeRaw : 'system') as Notification['type']
+  const created =
+    (raw.created_at as string) ||
+    (raw.createdAt as string) ||
+    new Date().toISOString()
+  return {
+    id: raw.id as string | number,
+    type,
+    title: String(raw.title ?? ''),
+    message: String(raw.message ?? ''),
+    is_read: Boolean(raw.is_read ?? raw.isRead ?? false),
+    created_at: created,
+  }
+}
+
 export function NotificationCenter() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([])
@@ -32,10 +51,13 @@ export function NotificationCenter() {
       setIsLoading(true)
       const result = await apiGet('/api/notifications')
       
-      if (result.success && result.notifications) {
-        const sorted = result.notifications.sort((a: Notification, b: Notification) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )
+      if (result.success && Array.isArray(result.notifications)) {
+        const sorted = result.notifications
+          .map((n: Record<string, unknown>) => normalizeNotificationRow(n))
+          .sort(
+            (a: Notification, b: Notification) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
         setNotifications(sorted)
         setFilteredNotifications(sorted)
       }

@@ -70,17 +70,21 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     line-height: 1.6;
     overflow-x: hidden;
-    cursor: none;
   }
 
-  /* Hide default cursor when custom cursor is active */
-  * {
-    cursor: none !important;
-  }
+  /* Custom cursor chỉ trên thiết bị có con trỏ chính xác (không áp dụng điện thoại) */
+  @media (hover: hover) and (pointer: fine) {
+    body {
+      cursor: none;
+    }
 
-  /* Re-enable pointer cursor for interactive elements */
-  a, button, [role="button"], .cursor-pointer, input, textarea, select {
-    cursor: none !important;
+    body * {
+      cursor: none !important;
+    }
+
+    a, button, [role="button"], .cursor-pointer, input, textarea, select {
+      cursor: none !important;
+    }
   }
 
   .smooth-transition {

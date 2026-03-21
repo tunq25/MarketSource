@@ -1,4 +1,5 @@
 import { logger } from "./logger"
+import { setLocalStorage } from "./localStorage-utils"
 
 export interface UserData {
   uid: string
@@ -76,6 +77,8 @@ class UserManager {
     }
 
     try {
+      const { getCsrfHeaders } = await import("@/lib/csrf-client")
+      const csrf = await getCsrfHeaders()
       const payload = {
         email: data.email,
         name: data.name || data.displayName,
@@ -87,14 +90,30 @@ class UserManager {
 
       const response = await fetch("/api/save-user", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrf },
         credentials: "include",
         body: JSON.stringify(payload),
       })
 
       const success = response.ok
+
+      // Header, DebugInfo, cart/checkout… vẫn đọc localStorage `currentUser` + `isLoggedIn`.
+      // Trước đây chỉ gọi API nên không ghi storage → UI tưởng chưa đăng nhập dù cookie auth-token đã có.
+      const mergedForClient: UserData = {
+        uid,
+        ...data,
+      }
+      try {
+        setLocalStorage("currentUser", mergedForClient)
+        // Không dùng setLocalStorage cho flag này: code cũ dùng getItem === 'true' (chuỗi thuần), không phải JSON boolean.
+        localStorage.setItem("isLoggedIn", "true")
+        window.dispatchEvent(new Event("userUpdated"))
+      } catch (persistErr) {
+        logger.warn("userManager: persist session to localStorage failed", { error: persistErr })
+      }
+
       return {
-        localSaved: true, // Marker to indicate logic moved
+        localSaved: true,
         firestoreSaved: true,
         apiSaved: success,
         offlineQueued: false,

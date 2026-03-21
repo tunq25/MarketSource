@@ -97,6 +97,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Convert to expected format
+    const emailVerified = Boolean((result as { email_verified_at?: unknown }).email_verified_at);
     return NextResponse.json({
       data: {
         uid: result.id.toString(),
@@ -107,6 +108,7 @@ export async function GET(request: NextRequest) {
         avatar_url: result.avatar_url,
         balance: result.balance ? parseFloat(String(result.balance)) : 0,
         role: result.role || 'user',
+        emailVerified,
       },
       error: null
     });

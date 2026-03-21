@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Query downloads + join với products để lấy title, image
+    // Chỉ select cột có trong schema `products` (không có version / file_size trên mọi DB)
     const downloads = await query(`
       SELECT 
         d.id,
@@ -41,10 +42,8 @@ export async function GET(request: NextRequest) {
         d.user_agent AS device,
         p.title AS product_title,
         p.image_url,
-        p.version,
-        p.file_size AS size,
         p.download_url,
-        (SELECT COUNT(*) FROM downloads WHERE product_id = d.product_id AND user_id = $1) AS total_downloads
+        (SELECT COUNT(*)::int FROM downloads d2 WHERE d2.product_id = d.product_id AND d2.user_id = $1) AS total_downloads
       FROM downloads d
       LEFT JOIN products p ON d.product_id = p.id
       WHERE d.user_id = $2
@@ -59,8 +58,8 @@ export async function GET(request: NextRequest) {
         user_id: d.user_id,
         product_id: d.product_id,
         product_title: d.product_title || 'Sản phẩm',
-        version: d.version || '1.0',
-        size: d.size,
+        version: '1.0',
+        size: null,
         download_url: d.download_url,
         image_url: d.image_url,
         ip_address: d.ip_address,

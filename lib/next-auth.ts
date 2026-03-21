@@ -29,7 +29,8 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
+    // Căn chỉnh với cookie JWT email/password (7d) — OAuth session không bị “cụt” hơn luồng credentials
+    maxAge: 7 * 24 * 60 * 60,
   },
   pages: {
     signIn: "/auth/login",
@@ -70,5 +71,5 @@ export const authOptions: NextAuthOptions = {
       }
     },
   },
-  debug: process.env.NODE_ENV === "development",
+  debug: process.env.NODE_ENV === "development" && process.env.NEXTAUTH_DEBUG === "true",
 }

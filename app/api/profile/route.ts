@@ -16,6 +16,7 @@ function buildProfileResponse(user: any, profileRow?: any) {
   return {
     id: user.id,
     email: user.email,
+    emailVerified: Boolean(user.email_verified_at),
     name: user.name,
     avatarUrl: user.avatar_url,
     phone: profileRow?.phone || "",
@@ -125,12 +126,17 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Thiếu email" }, { status: 400 })
     }
 
-    const { verifyFirebaseToken, requireAdmin } = await import("@/lib/api-auth");
+    const { verifyFirebaseToken, requireAdmin, requireEmailVerifiedForUser } = await import("@/lib/api-auth");
     const authUser = await verifyFirebaseToken(request);
     const isAdmin = await requireAdmin(request).catch(() => false);
 
     if (!authUser && !isAdmin) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (authUser && !isAdmin) {
+      const ev = await requireEmailVerifiedForUser(authUser);
+      if (ev) return ev;
     }
 
     if (!isAdmin && email.toLowerCase() !== authUser?.email?.toLowerCase()) {

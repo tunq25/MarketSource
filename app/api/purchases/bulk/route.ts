@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { normalizeUserId, getProductById, createPurchase, query, queryOne, createBulkPurchase } from "@/lib/database"
-import { verifyFirebaseToken } from "@/lib/api-auth"
+import { verifyFirebaseToken, requireEmailVerifiedForUser } from "@/lib/api-auth"
 import { logger } from "@/lib/logger"
 
 export const runtime = 'nodejs'
@@ -16,6 +16,9 @@ export async function POST(request: NextRequest) {
     if (!authUser) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+
+    const ev = await requireEmailVerifiedForUser(authUser);
+    if (ev) return ev;
 
     const body = await request.json();
     const { items } = body;

@@ -548,6 +548,10 @@ export async function createOrUpdateUser(userData: {
   avatarUrl?: string;
   ipAddress?: string;
   role?: 'user' | 'admin';
+  /** OAuth: email đã được provider xác minh */
+  markEmailVerified?: boolean;
+  emailVerificationToken?: string | null;
+  emailVerificationExpires?: Date | null;
 }) {
   try {
     // Kiểm tra user đã tồn tại chưa
@@ -595,6 +599,12 @@ export async function createOrUpdateUser(userData: {
         paramIndex++;
       }
 
+      if (userData.markEmailVerified) {
+        updates.push(`email_verified_at = CURRENT_TIMESTAMP`);
+        updates.push(`email_verification_token = NULL`);
+        updates.push(`email_verification_expires = NULL`);
+      }
+
       // Luôn cập nhật updated_at
       updates.push('updated_at = CURRENT_TIMESTAMP');
 
@@ -637,11 +647,24 @@ export async function createOrUpdateUser(userData: {
         }
       }
 
+      const markV = Boolean(userData.markEmailVerified);
+      const evAt = markV ? new Date() : null;
+      const evTok =
+        !markV && userData.emailVerificationToken
+          ? userData.emailVerificationToken
+          : null;
+      const evExp =
+        !markV && userData.emailVerificationExpires
+          ? userData.emailVerificationExpires
+          : null;
+
       // Tạo user mới
       const result = await pool.query(
         `INSERT INTO users (
-          email, name, username, password_hash, avatar_url, ip_address, role, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          email, name, username, password_hash, avatar_url, ip_address, role,
+          email_verified_at, email_verification_token, email_verification_expires,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING id`,
         [
           userData.email,
@@ -651,6 +674,9 @@ export async function createOrUpdateUser(userData: {
           userData.avatarUrl || null,
           userData.ipAddress || null,
           userData.role || 'user',
+          evAt,
+          evTok,
+          evExp,
         ]
       );
 
@@ -1169,7 +1195,10 @@ export async function createWithdrawal(withdrawalData: {
   accountNumber: string;
   accountName: string;
   userEmail?: string;
+  idempotencyKey?: string | null;
 }) {
+  const idem = withdrawalData.idempotencyKey?.trim();
+
   return await withTransaction(async (client) => {
     const dbUserId = await normalizeUserId(withdrawalData.userId, withdrawalData.userEmail);
     if (!dbUserId) {
@@ -1184,6 +1213,20 @@ export async function createWithdrawal(withdrawalData: {
 
     if (userRes.rows.length === 0) {
       throw new Error('User not found');
+    }
+
+    if (idem) {
+      const replay = await client.query(
+        `SELECT id, created_at FROM withdrawals WHERE user_id = $1 AND idempotency_key = $2`,
+        [dbUserId, idem]
+      );
+      if (replay.rows.length > 0) {
+        return {
+          id: replay.rows[0].id,
+          createdAt: replay.rows[0].created_at,
+          idempotentReplay: true as const,
+        };
+      }
     }
 
     const currentBalance = parseFloat(userRes.rows[0].balance || '0');
@@ -1208,23 +1251,61 @@ export async function createWithdrawal(withdrawalData: {
     );
 
     // 4. Tạo bản ghi rút tiền
-    const result = await client.query(
-      `INSERT INTO withdrawals (user_id, amount, bank_name, account_number, account_name, user_email, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending')
-       RETURNING id, created_at`,
-      [
-        dbUserId,
-        withdrawalData.amount,
-        withdrawalData.bankName,
-        withdrawalData.accountNumber,
-        withdrawalData.accountName,
-        withdrawalData.userEmail || null,
-      ]
-    );
+    const hasIdem = Boolean(idem);
+    let result;
+    try {
+      result = await client.query(
+        hasIdem
+          ? `INSERT INTO withdrawals (user_id, amount, bank_name, account_number, account_name, user_email, status, idempotency_key)
+             VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+             RETURNING id, created_at`
+          : `INSERT INTO withdrawals (user_id, amount, bank_name, account_number, account_name, user_email, status)
+             VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+             RETURNING id, created_at`,
+        hasIdem
+          ? [
+              dbUserId,
+              withdrawalData.amount,
+              withdrawalData.bankName,
+              withdrawalData.accountNumber,
+              withdrawalData.accountName,
+              withdrawalData.userEmail || null,
+              idem,
+            ]
+          : [
+              dbUserId,
+              withdrawalData.amount,
+              withdrawalData.bankName,
+              withdrawalData.accountNumber,
+              withdrawalData.accountName,
+              withdrawalData.userEmail || null,
+            ]
+      );
+    } catch (e: any) {
+      if (e?.code === '23505' && idem) {
+        await client.query(
+          'UPDATE users SET balance = balance + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [withdrawalData.amount, dbUserId]
+        );
+        const replay = await client.query(
+          `SELECT id, created_at FROM withdrawals WHERE user_id = $1 AND idempotency_key = $2`,
+          [dbUserId, idem]
+        );
+        if (replay.rows.length > 0) {
+          return {
+            id: replay.rows[0].id,
+            createdAt: replay.rows[0].created_at,
+            idempotentReplay: true as const,
+          };
+        }
+      }
+      throw e;
+    }
 
     return {
       id: result.rows[0].id,
       createdAt: result.rows[0].created_at,
+      idempotentReplay: false as const,
     };
   });
 }
@@ -1368,8 +1449,18 @@ export async function approveWithdrawalAndUpdateBalance(
 
 export async function getPurchases(userId?: number) {
   try {
+    // JOIN đủ cột sản phẩm để dashboard "Sản phẩm đã mua" có ảnh, danh mục, link tải/demo
     let query = `
-      SELECT p.*, pr.title as product_title, pr.price, u.email, u.username
+      SELECT p.*, 
+             pr.title AS product_title, 
+             pr.price,
+             pr.category,
+             pr.description,
+             pr.image_url,
+             pr.demo_url,
+             pr.download_url,
+             u.email, 
+             u.username
       FROM purchases p
       LEFT JOIN products pr ON p.product_id = pr.id
       LEFT JOIN users u ON p.user_id = u.id

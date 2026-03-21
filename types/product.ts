@@ -59,6 +59,8 @@ export interface ProductRating {
 export interface Purchase {
   id: number | string
   userId: number | string
+  /** Email gắn bản ghi (API / lọc client) — không bắt buộc */
+  userEmail?: string
   productId: number | string
   product?: Product
   image?: string | null

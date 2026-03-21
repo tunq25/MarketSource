@@ -12,7 +12,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       initial={reduceMotion ? undefined : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className="container mx-auto max-w-6xl space-y-6 px-4 py-8"
+      className="container mx-auto max-w-6xl space-y-6 px-3 py-6 sm:px-4 sm:py-8"
     >
       <Suspense fallback={<div className="h-48 rounded-2xl bg-muted animate-pulse" />}>{children}</Suspense>
     </motion.main>

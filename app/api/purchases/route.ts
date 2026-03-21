@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPurchases, createPurchase, getProductById, getUserIdByEmail, normalizeUserId, createNotification, createChat } from "@/lib/database"
-import { verifyFirebaseToken, validateRequest } from "@/lib/api-auth"
+import { verifyFirebaseToken, validateRequest, requireEmailVerifiedForUser } from "@/lib/api-auth"
 import { purchaseSchema } from "@/lib/validation-schemas"
 import { notifyPurchaseSuccess, notifyReferralCommission } from "@/lib/notifications"
 import { logger } from "@/lib/logger"
@@ -26,6 +26,11 @@ export async function GET(request: NextRequest) {
     // ✅ FIX: Dùng requireAdmin() thay vì check X-Admin-Auth header
     const { requireAdmin } = await import('@/lib/api-auth');
     const isAdmin = await requireAdmin(request).catch(() => false);
+
+    if (authUser && !isAdmin) {
+      const ev = await requireEmailVerifiedForUser(authUser);
+      if (ev) return ev;
+    }
 
     if (!authUser && !isAdmin) {
       return NextResponse.json({
@@ -106,6 +111,9 @@ export async function POST(request: NextRequest) {
         error: 'Unauthorized'
       }, { status: 401 });
     }
+
+    const evPost = await requireEmailVerifiedForUser(authUser);
+    if (evPost) return evPost;
 
     const body = await request.json();
 

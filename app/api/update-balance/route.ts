@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
-import { requireAdmin } from '@/lib/api-auth'
+import { requireAdmin, getClientIP } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -11,8 +11,7 @@ export const runtime = 'nodejs'
  */
 export async function PUT(request: NextRequest) {
   try {
-    // Chỉ admin mới được manually update balance
-    await requireAdmin(request)
+    const admin = await requireAdmin(request)
 
     const body = await request.json()
     const { userId, userEmail, newBalance } = body
@@ -38,12 +37,33 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Cannot resolve user ID' }, { status: 400 })
     }
 
-    // Update balance trong PostgreSQL
-    const { query } = await import('@/lib/database')
+    const { query, getUserById } = await import('@/lib/database')
+    const before = await getUserById(dbUserId)
+    const oldBalance = before?.balance != null ? Number(before.balance) : null
+
     await query(
       'UPDATE users SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [newBalance, dbUserId]
     )
+
+    try {
+      const { logAdminAction, resolveAdminIdForAudit } = await import('@/lib/audit-logger')
+      const adminId = await resolveAdminIdForAudit({
+        email: admin.email,
+        uid: (admin as { uid?: string }).uid,
+      })
+      await logAdminAction({
+        adminId,
+        adminEmail: admin.email || undefined,
+        action: 'BALANCE_SET',
+        targetType: 'user',
+        targetId: dbUserId,
+        details: { oldBalance, newBalance },
+        ipAddress: getClientIP(request),
+      })
+    } catch {
+      /* non-critical */
+    }
 
     logger.info('Balance updated via API', { dbUserId, newBalance })
 

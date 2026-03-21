@@ -19,8 +19,8 @@ export default function SessionTimeout() {
     // Gọi API logout để xóa cookie (optional but recommended)
     fetch('/api/logout', { method: 'POST' }).catch(() => {});
     
-    // Chuyển hướng về login
-    router.push('/login?reason=timeout');
+    // Trang đăng nhập thực tế là /auth/login (không có route /login)
+    router.push("/auth/login?reason=timeout");
     router.refresh();
   }, [router]);
 

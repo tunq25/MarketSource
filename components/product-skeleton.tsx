@@ -7,12 +7,12 @@ export function ProductSkeleton() {
   return (
     <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 overflow-hidden">
       <div className="relative">
-        <Skeleton className="w-full h-48" />
+        <Skeleton className="w-full h-36 sm:h-48" />
       </div>
-      <CardContent className="p-6">
-        <Skeleton className="h-6 w-3/4 mb-2" />
-        <Skeleton className="h-4 w-full mb-4" />
-        <div className="flex gap-2 mb-4">
+      <CardContent className="p-3 sm:p-6">
+        <Skeleton className="h-4 sm:h-6 w-3/4 mb-2" />
+        <Skeleton className="h-4 w-full mb-4 hidden sm:block" />
+        <div className="hidden sm:flex gap-2 mb-4">
           <Skeleton className="h-5 w-16" />
           <Skeleton className="h-5 w-20" />
           <Skeleton className="h-5 w-14" />
@@ -29,7 +29,7 @@ export function ProductSkeleton() {
 
 export function ProductSkeletonGrid({ count = 6 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 md:gap-8">
       {Array.from({ length: count }).map((_, index) => (
         <div key={index} className="animate-fade-in-up" style={{ animationDelay: `${index * 50}ms` }}>
           <ProductSkeleton />
