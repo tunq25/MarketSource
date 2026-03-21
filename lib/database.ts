@@ -88,8 +88,8 @@ function createPool(): Pool | null {
     return null;
   }
 
-  // ✅ FIX: Ưu tiên DATABASE_URL hoặc NETLIFY_DATABASE_URL (Netlify specific)
-  let databaseUrl = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL;
+  // ✅ FIX: Ưu tiên DATABASE_URL, POSTGRES_URL hoặc NETLIFY_DATABASE_URL
+  let databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.NETLIFY_DATABASE_URL;
 
   // ✅ FIX IPv4: Tự động chuyển sang Session Pooler (port 6543) nếu port 5432 - Đã vô hiệu hóa để dùng đúng URL
   // if (databaseUrl && databaseUrl.includes(':5432/') && !databaseUrl.includes('pgbouncer=true')) {
@@ -113,8 +113,9 @@ function createPool(): Pool | null {
         ssl: process.env.DB_SSL === 'disable'
           ? undefined
           : {
-            // ✅ FIX: rejectUnauthorized=true in production (MITM protection)
-            rejectUnauthorized: process.env.NODE_ENV === 'production',
+            // ✅ FIX: Một số provider (Supabase/Neon) cần rejectUnauthorized: false trên Vercel
+            // trừ khi người dùng cấu hình CA cert thủ công.
+            rejectUnauthorized: process.env.DB_SSL_STRICT === 'true',
           },
       });
 
@@ -158,10 +159,10 @@ function createPool(): Pool | null {
     throw new Error('DB_PASSWORD, DB_HOST, and DB_USER environment variables are required. Please set them in your .env file.');
   }
 
-  // ✅ FIX IPv4: Tự động dùng port 6543 (Session Pooler) nếu port 5432
+  // ✅ FIX: Chỉ auto-switch port 6543 nếu KHÔNG phải môi trường production hoặc được yêu cầu
   let dbPort = parseInt(process.env.DB_PORT || '5432');
-  if (dbPort === 5432) {
-    dbPort = 6543; // Auto-switch to Session Pooler for IPv4
+  if (dbPort === 5432 && process.env.NODE_ENV !== 'production' && process.env.AUTO_SWITCH_PORT !== 'false') {
+    dbPort = 6543; // Auto-switch to Session Pooler for IPv4 compatibility (mostly for local dev)
     logger.info('Auto-switched DB_PORT to 6543 (Session Pooler) for IPv4 compatibility');
   }
 
@@ -176,8 +177,8 @@ function createPool(): Pool | null {
     ssl: process.env.DB_SSL === 'disable'
       ? undefined
       : {
-        // ✅ FIX: rejectUnauthorized=true in production (MITM protection)
-        rejectUnauthorized: process.env.NODE_ENV === 'production',
+        // ✅ FIX: rejectUnauthorized fallback tương tự nhánh DATABASE_URL
+        rejectUnauthorized: process.env.DB_SSL_STRICT === 'true',
       },
   };
 
