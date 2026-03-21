@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, deletePasswordResetTokens, createPasswordResetTokenRecord } from '@/lib/database-mysql';
+import { getUserByEmail, deletePasswordResetTokens, createPasswordResetTokenRecord } from '@/lib/database';
 import { getClientIP } from '@/lib/api-auth';
 import crypto from 'crypto';
 import { logger } from '@/lib/logger';

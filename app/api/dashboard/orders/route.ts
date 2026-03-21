@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
   }
 
-  const purchases = await getUserPurchases(user.uid)
+  const purchases = await getUserPurchases(user.uid, 50, user.email)
   return NextResponse.json({ success: true, data: purchases })
 }
 

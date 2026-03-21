@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, createOrUpdateUser } from '@/lib/database-mysql';
+import { getUserByEmail, createOrUpdateUser } from '@/lib/database';
 import { getClientIP } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
 import bcrypt from 'bcryptjs';
+import { readJsonBody } from '@/lib/parse-json-body';
 
 export const runtime = 'nodejs'
 
@@ -11,7 +12,17 @@ export const runtime = 'nodejs'
  */
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, userData, deviceInfo, ipAddress: providedIp } = await request.json();
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) {
+      return NextResponse.json({ user: null, error: parsed.error }, { status: parsed.status });
+    }
+    const { email, password, userData, deviceInfo, ipAddress: providedIp } = parsed.data as {
+      email?: string;
+      password?: string;
+      userData?: { name?: string };
+      deviceInfo?: unknown;
+      ipAddress?: string;
+    };
     
     if (!email || !password) {
       return NextResponse.json(

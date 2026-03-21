@@ -917,12 +917,13 @@ export default function DashboardPage() {
           const response = await fetch('/api/auth-callback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({
               uid: (session.user as any).id || `social_${Date.now()}`,
               email: session.user.email,
               name: session.user.name,
               avatarUrl: session.user.image,
-              provider: (session.user as any).provider || 'google',
+              provider: (session.user as any).provider || 'oauth',
               ipAddress: userIP !== "Loading..." ? userIP : 'unknown'
             })
           });

@@ -1,13 +1,12 @@
 
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getWithdrawals, createWithdrawal, updateWithdrawalStatus } from '@/lib/database-mysql'
+import { getWithdrawals, createWithdrawal, updateWithdrawalStatus, getUserIdByEmail, getUserById, queryOne } from '@/lib/database'
 import { verifyFirebaseToken, requireAdmin, validateRequest } from '@/lib/api-auth'
 import { checkRateLimitAndRespond } from '@/lib/rate-limit'
 import { withdrawalSchema, updateWithdrawalStatusSchema } from '@/lib/validation-schemas'
 import { notifyWithdrawalRequest } from '@/lib/notifications'
 import { logger } from '@/lib/logger'
-import { getUserIdByEmail, getUserByIdMySQL, queryOne } from '@/lib/database-mysql'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -132,7 +131,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       `SELECT w.*, u.email, u.username
        FROM withdrawals w
        LEFT JOIN users u ON w.user_id = u.id
-       WHERE w.id = ?`,
+       WHERE w.id = $1`,
       [result.id],
     );
 
@@ -203,9 +202,9 @@ export async function PUT(request: NextRequest): Promise<Response> {
     const updateData = validation.data;
 
     // ✅ BUG #1 FIX: Phân nhánh approve/reject đúng cách
-    if (updateData.status === 'approved') {
+    if (updateData.status === 'approved' || updateData.status === 'rejected') {
       const withdrawal = await queryOne<any>(
-        'SELECT id, user_id, amount, status FROM withdrawals WHERE id = ?',
+        'SELECT id, user_id, amount, status FROM withdrawals WHERE id = $1',
         [Number(updateData.withdrawalId)]
       );
 
@@ -216,36 +215,36 @@ export async function PUT(request: NextRequest): Promise<Response> {
         }, { status: 404 });
       }
 
-      if (withdrawal.status === 'approved') {
+      if (withdrawal.status === 'approved' && updateData.status === 'approved') {
         return NextResponse.json({
           success: false,
           error: 'Withdrawal đã được duyệt trước đó'
         }, { status: 400 });
       }
 
-      // ✅ CRITICAL FIX: Gọi hàm trừ balance thay vì chỉ đổi status
-      const { approveWithdrawalAndUpdateBalanceMySQL } = await import('@/lib/database-mysql');
-      const result = await approveWithdrawalAndUpdateBalanceMySQL(
+      // ✅ CRITICAL FIX: Dùng updateWithdrawalStatus duy nhất để xử lý cả status và balance
+      await updateWithdrawalStatus(
         Number(updateData.withdrawalId),
-        Number(withdrawal.user_id),
-        Number(withdrawal.amount),
+        updateData.status as 'approved' | 'rejected' | 'pending',
         updateData.approvedBy || 'admin'
       );
 
-      logger.info('Withdrawal approved and balance deducted', {
+      logger.info('Withdrawal status updated', {
         withdrawalId: updateData.withdrawalId,
+        status: updateData.status,
         userId: withdrawal.user_id,
         amount: withdrawal.amount,
-        newBalance: result.newBalance,
       });
 
       // Tạo notification cho user
       try {
-        const { createNotification } = await import('@/lib/database-mysql');
+        const { createNotification } = await import('@/lib/database');
         await createNotification({
           userId: Number(withdrawal.user_id),
-          type: 'withdrawal_approved',
-          message: `Yêu cầu rút ${Number(withdrawal.amount).toLocaleString('vi-VN')}đ đã được duyệt. Số dư: ${result.newBalance.toLocaleString('vi-VN')}đ`,
+          type: updateData.status === 'approved' ? 'withdrawal_approved' : 'withdrawal_rejected',
+          message: updateData.status === 'approved' 
+            ? `Yêu cầu rút ${Number(withdrawal.amount).toLocaleString('vi-VN')}đ đã được duyệt.` 
+            : `Yêu cầu rút ${Number(withdrawal.amount).toLocaleString('vi-VN')}đ đã bị từ chối. Số tiền đã được hoàn lại vào ví.`,
           isRead: false,
         });
       } catch (notifErr) {
@@ -254,20 +253,19 @@ export async function PUT(request: NextRequest): Promise<Response> {
 
       return NextResponse.json({
         success: true,
-        message: 'Withdrawal approved and balance updated',
-        newBalance: result.newBalance,
+        message: `Withdrawal ${updateData.status} successfully`,
       });
     } else {
-      // Reject hoặc pending → chỉ đổi status
+      // Pending → chỉ đổi status cơ bản
       await updateWithdrawalStatus(
         Number(updateData.withdrawalId),
-        updateData.status,
+        'pending',
         updateData.approvedBy
       );
 
       return NextResponse.json({
         success: true,
-        message: 'Withdrawal status updated'
+        message: 'Withdrawal moved to pending'
       });
     }
   } catch (error: any) {

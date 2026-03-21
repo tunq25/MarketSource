@@ -23,6 +23,14 @@ interface AnalyticsProps {
   withdrawals: any[]
 }
 
+/** Chuỗi YYYY-MM-DD (UTC) hoặc null nếu không parse được — tránh RangeError từ toISOString */
+function toDateKey(value: unknown): string | null {
+  if (value == null || value === "") return null
+  const d = new Date(value as string | number | Date)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toISOString().split("T")[0]
+}
+
 export function Analytics({ users, products, purchases, deposits, withdrawals }: AnalyticsProps) {
   const [timeRange, setTimeRange] = useState("7d")
 
@@ -101,23 +109,25 @@ export function Analytics({ users, products, purchases, deposits, withdrawals }:
       const dateLabel = `${date.getDate()}/${date.getMonth() + 1}`
       
       const dayPurchases = filteredPurchases.filter(p => {
-        const purchaseDate = new Date(p.timestamp || p.purchaseDate || p.created_at)
-        return purchaseDate.toISOString().split('T')[0] === dateStr
+        const key = toDateKey(p.timestamp ?? p.purchaseDate ?? p.created_at)
+        return key === dateStr
       })
       
       const dayDeposits = filteredDeposits.filter(d => {
-        const depositDate = new Date(d.timestamp || d.created_at)
-        return depositDate.toISOString().split('T')[0] === dateStr
+        const key = toDateKey(d.timestamp ?? d.created_at)
+        return key === dateStr
       })
       
       const dayWithdrawals = filteredWithdrawals.filter(w => {
-        const withdrawalDate = new Date(w.timestamp || w.created_at)
-        return withdrawalDate.toISOString().split('T')[0] === dateStr
+        const key = toDateKey(w.timestamp ?? w.created_at)
+        return key === dateStr
       })
       
       const dayUsers = filteredUsers.filter(u => {
-        const userDate = new Date(u.createdAt || u.joinedAt)
-        return userDate.toISOString().split('T')[0] === dateStr
+        const key = toDateKey(
+          u.createdAt ?? u.joinedAt ?? u.created_at ?? u.registrationTime
+        )
+        return key === dateStr
       })
       
       return {

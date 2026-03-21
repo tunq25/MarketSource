@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { trackDownload, getProductById } from '@/lib/database-mysql';
+import { trackDownload, getProductById, getUserIdByEmail } from '@/lib/database';
 import { verifyFirebaseToken, getClientIP } from '@/lib/api-auth';
 import { checkRateLimitAndRespond } from '@/lib/rate-limit';
-import { getUserIdByEmail } from '@/lib/database-mysql';
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

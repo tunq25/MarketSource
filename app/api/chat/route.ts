@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getClientIP } from '@/lib/api-auth';
-import { query, queryOne, getUserIdByEmail, createChat, getChats } from '@/lib/database-mysql';
+import { query, queryOne, getUserIdByEmail, createChat, getChats } from '@/lib/database';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 import { Product } from '@/types/product';
@@ -53,7 +53,6 @@ async function verifyAuthUser(request: NextRequest): Promise<{ email: string; ui
     }
 
     // ✅ SECURITY FIX: Cách 2 (x-user-email header) ĐÃ BỊ XÓA — Có thể bị mạo danh
-    // Chỉ tin cậy JWT cookie, NextAuth session, hoặc Firebase token
 
     // Cách 3: Firebase token (backward compatible)
     try {
@@ -97,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     // Lấy thông tin sender từ database
     const sender = await queryOne<any>(
-      "SELECT id, role FROM users WHERE email = ?",
+      "SELECT id, role FROM users WHERE email = $1",
       [authUser.email]
     );
 
@@ -113,42 +112,37 @@ export async function POST(request: NextRequest) {
     let targetAdminId: number | null;
 
     if (isAdmin) {
-      // Admin đang reply cho một user cụ thể
       if (!receiverId) {
         return NextResponse.json({ success: false, error: 'Admin cần chọn khách hàng để gửi tin' }, { status: 400 });
       }
       targetUserId = receiverId;
       targetAdminId = senderId;
     } else {
-      // Khách hàng gửi cho admin
       targetUserId = senderId;
-      // Tìm admin ID chính thức (nếu có)
       const adminUser = await queryOne<any>("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
       targetAdminId = adminUser?.id || null;
     }
 
     // Lưu tin nhắn
     const result = await createChat({
-      userId: targetUserId, // Đây là "session ID" của hội thoại
+      userId: targetUserId,
       adminId: targetAdminId,
       message: sanitizedMessage,
-      isAdmin: isAdmin // Flag này xác định tin nhắn này của ai (true = của admin/ai, false = của khách)
+      isAdmin: isAdmin
     });
 
-    // ✅ Gemini Auto-Reply - Chỉ khi KHÁCH gửi tin nhắn (không phải admin)
-    // Và không có admin nào đang login để trả lời realtime (optional logic)
+    // ✅ Gemini Auto-Reply
     let autoReplyMessage: any = null;
     if (!isAdmin && process.env.GEMINI_API_KEY && process.env.ENABLE_AUTO_REPLY === 'true') {
       try {
         autoReplyMessage = await generateAutoReply(sanitizedMessage, targetUserId);
 
         if (autoReplyMessage) {
-          // Lưu AI reply
           await createChat({
             userId: targetUserId,
             adminId: targetAdminId,
             message: `🤖 ${autoReplyMessage}`,
-            isAdmin: true, // Tin nhắn AI tính là phía Admin
+            isAdmin: true,
           });
         }
       } catch (autoReplyError) {
@@ -204,30 +198,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found in database' }, { status: 404 });
     }
 
-    // ✅ Check if admin - kiểm tra cả admin table và users.role
+    // ✅ Check if admin
     const adminCheck = await query<any>(
       `SELECT a.id 
        FROM admin a
-       WHERE a.user_id = ?
+       WHERE a.user_id = $1
        UNION
        SELECT u.id
        FROM users u
-       WHERE u.id = ? AND u.role = 'admin'`,
-      [currentUserId, currentUserId]
+       WHERE u.id = $1 AND u.role = 'admin'`,
+      [currentUserId]
     );
     const isAdmin = adminCheck.length > 0;
 
     // Get chats với pagination ở database level
     let chats;
     if (isAdmin) {
-      // Admin có thể xem chat with user cụ thể hoặc tất cả
       if (userIdParam) {
         chats = await getChats(parseInt(userIdParam), currentUserId, limit, offset);
       } else {
         chats = await getChats(undefined, currentUserId, limit, offset);
       }
     } else {
-      // User chỉ xem chat của mình với admin
       chats = await getChats(currentUserId, undefined, limit, offset);
     }
 
@@ -239,7 +231,7 @@ export async function GET(request: NextRequest) {
       if (chat.is_admin) {
         if (messageContent.startsWith('🤖 ')) {
           senderType = 'ai';
-          messageContent = messageContent.substring(2).trim(); // Remove icon
+          messageContent = messageContent.substring(2).trim();
         } else {
           senderType = 'admin';
         }
@@ -281,7 +273,6 @@ async function generateAutoReply(userMessage: string, userId: number): Promise<s
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    // Lấy lịch sử chat gần đây để context
     let chatHistory = '';
     try {
       const recentChats = await getChats(userId, undefined, 5, 0);
@@ -291,11 +282,10 @@ async function generateAutoReply(userMessage: string, userId: number): Promise<s
         .join('\n');
     } catch { chatHistory = ''; }
 
-    // ✅ FIX: Wrap getProducts trong try-catch riêng để tránh crash toàn bộ
     let productsList = '';
     let popularProducts: any[] = [];
     try {
-      const { getProducts } = await import('@/lib/database-mysql');
+      const { getProducts } = await import('@/lib/database');
       popularProducts = await getProducts({ isActive: true, limit: 5 });
       productsList = popularProducts
         .map((p: any, i: number) => `${i + 1}. ${p.title} - ${p.price ? `${Number(p.price).toLocaleString('vi-VN')}đ` : 'Liên hệ'}${p.category ? ` (${p.category})` : ''}`)
@@ -305,7 +295,6 @@ async function generateAutoReply(userMessage: string, userId: number): Promise<s
       productsList = 'Không tải được danh sách sản phẩm';
     }
 
-    // Tìm sản phẩm được đề cập trong câu hỏi
     const mentionedProduct = findMentionedProduct(userMessage, popularProducts);
 
     const prompt = `Bạn là trợ lý AI chuyên nghiệp của website QtusDev Market - chuyên bán source code. Trả lời ngắn gọn, thân thiện, chuyên nghiệp bằng tiếng Việt (tối đa 150 từ).
@@ -334,7 +323,6 @@ Yêu cầu: Trả lời bằng tiếng Việt, ngắn gọn, thân thiện. Nế
     return sanitizedReply;
   } catch (error: any) {
     logger.error('Gemini auto-reply error', { userId, error: error.message });
-    // ✅ FIX: Trả lời thông minh thay vì "đang bảo trì"
     return getSmartFallbackReply(userMessage);
   }
 }

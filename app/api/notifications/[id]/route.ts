@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyFirebaseToken } from "@/lib/api-auth"
-import { getUserIdByEmail, query, queryOne } from "@/lib/database-mysql"
+import { getUserIdByEmail, query, queryOne } from "@/lib/database"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,7 +23,7 @@ export async function PUT(
       )
     }
 
-    const { getUserIdByEmail } = await import('@/lib/database-mysql')
+    const { getUserIdByEmail } = await import('@/lib/database')
     const userEmail = authUser?.email || (isAdmin as any)?.email || ''
     const userId = await getUserIdByEmail(userEmail)
     if (!userId) {
@@ -39,13 +39,13 @@ export async function PUT(
     // Update notification
     await query(
       `UPDATE notifications 
-       SET is_read = ?, updated_at = NOW()
-       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
-      [is_read ? 1 : 0, routeParams.id, userId]
+       SET is_read = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL`,
+      [is_read ? true : false, routeParams.id, userId]
     )
 
     const notification = await queryOne<any>(
-      "SELECT * FROM notifications WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+      "SELECT * FROM notifications WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
       [routeParams.id, userId]
     )
 
@@ -88,7 +88,7 @@ export async function DELETE(
       )
     }
 
-    const { getUserIdByEmail } = await import('@/lib/database-mysql')
+    const { getUserIdByEmail } = await import('@/lib/database')
     const userEmail = authUser?.email || (isAdmin as any)?.email || ''
     const userId = await getUserIdByEmail(userEmail)
     if (!userId) {
@@ -101,13 +101,13 @@ export async function DELETE(
     // Soft delete notification
     const result = await query(
       `UPDATE notifications 
-       SET deleted_at = NOW()
-       WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+       SET deleted_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+       RETURNING id`,
       [routeParams.id, userId]
-    ) as any
+    )
 
-    // ✅ FIX: Dùng affectedRows từ bridge để biết có xoá thật hay không
-    if (!result || result.affectedRows === 0) {
+    if (result.length === 0) {
       return NextResponse.json(
         { error: 'Notification not found or already deleted' },
         { status: 404 }

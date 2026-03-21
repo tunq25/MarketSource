@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseToken } from '@/lib/api-auth';
-import { getProducts, getProductById } from '@/lib/database-mysql';
+import { getProducts, getProductById } from '@/lib/database';
 import { logger } from '@/lib/logger';
 import { z } from 'zod';
 

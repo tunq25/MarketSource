@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyFirebaseToken, requireAdmin } from "@/lib/api-auth"
-import { query } from "@/lib/database-mysql"
+import { query } from "@/lib/database"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,13 +31,14 @@ export async function POST(request: NextRequest) {
         }
 
         // Prepare batch insert cho notifications
-        // Bulk insert: INSERT INTO notifications (user_id, type, message, is_read, created_at) VALUES (?,?,?,?,NOW()), (?,?,?,?,NOW())...
         const values: any[] = []
         const placeholders: string[] = []
+        let paramIdx = 1
 
         users.forEach((u: any) => {
-            placeholders.push('(?, ?, ?, ?, NOW())')
-            values.push(u.id, type, finalMessage, 0)
+            placeholders.push(`($${paramIdx}, $${paramIdx + 1}, $${paramIdx + 2}, $${paramIdx + 3}, CURRENT_TIMESTAMP)`)
+            values.push(u.id, type, finalMessage, false)
+            paramIdx += 4
         })
 
         const sql = `INSERT INTO notifications (user_id, type, message, is_read, created_at) VALUES ${placeholders.join(', ')}`

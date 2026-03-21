@@ -272,13 +272,13 @@ async function isDatabaseAdmin(email: string | null): Promise<boolean> {
   if (!email) {
     return false;
   }
-  const { getUserIdByEmailMySQL, getUserByIdMySQL } = await import('@/lib/database-mysql');
-  const userId = await getUserIdByEmailMySQL(email);
+  const { getUserIdByEmail, getUserById } = await import('@/lib/database');
+  const userId = await getUserIdByEmail(email);
   if (!userId) {
     return false;
   }
 
-  const user = await getUserByIdMySQL(userId);
+  const user = await getUserById(userId);
   return user != null && (user.role === 'admin' || user.role === 'superadmin');
 }
 

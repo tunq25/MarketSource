@@ -96,6 +96,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'files.catbox.moe',
       },
+      {
+        protocol: 'https',
+        hostname: 'cdn.phototourl.com',
+        pathname: '/**',
+      },
     ],
     // ✅ RE-ENABLED: Đã bật lại Image Optimization để tối ưu performance.
     // Nếu gặp lỗi "Input Buffer is empty" với một số CDN, hãy kiểm tra lại cấu hình sharp.

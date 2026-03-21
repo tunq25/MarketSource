@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/api-auth"
-import { query } from "@/lib/database-mysql"
+import { query } from "@/lib/database"
 import { checkRateLimitAndRespond } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
@@ -34,20 +34,24 @@ export async function GET(request: NextRequest) {
       WHERE n.deleted_at IS NULL
     `
     const params: any[] = []
+    let paramIndex = 1
 
     if (userId) {
-      sql += ` AND n.user_id = ?`
+      sql += ` AND n.user_id = $${paramIndex}`
       params.push(parseInt(userId))
+      paramIndex++
     }
 
     if (type) {
-      sql += ` AND n.type = ?`
+      sql += ` AND n.type = $${paramIndex}`
       params.push(type)
+      paramIndex++
     }
 
     if (isRead !== null && isRead !== '') {
-      sql += ` AND n.is_read = ?`
-      params.push(isRead === 'true' ? 1 : 0)
+      sql += ` AND n.is_read = $${paramIndex}`
+      params.push(isRead === 'true')
+      paramIndex++
     }
 
     sql += ` ORDER BY n.created_at DESC LIMIT 1000`

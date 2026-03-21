@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyFirebaseToken } from '@/lib/api-auth'
 import { logger } from '@/lib/logger'
-import { getUserIdByEmail, query, queryOne } from '@/lib/database-mysql'
+import { getUserIdByEmail, query, queryOne } from '@/lib/database'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -19,11 +19,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    const tickets = await query<any[]>(
+    const tickets = await query<any>(
       `SELECT id, user_id, subject, category, priority, message, status,
               created_at, updated_at, admin_reply, admin_replied_at
        FROM support_tickets
-       WHERE user_id = ?
+       WHERE user_id = $1
        ORDER BY created_at DESC`,
       [userId]
     )
@@ -77,16 +77,11 @@ export async function POST(request: NextRequest) {
 
     // ✅ FIX: Schema managed via migration, remove CREATE TABLE runtime
 
-    const result = await query<any>(
-      `INSERT INTO support_tickets (user_id, subject, category, priority, message, status)
-       VALUES (?, ?, ?, ?, ?, 'open')`,
-      [userId, subject.slice(0, 255), safeCategory, safePriority, message.slice(0, 10000)]
-    )
-
-    const insertId = (result as any).insertId
     const created = await queryOne<any>(
-      'SELECT * FROM support_tickets WHERE id = ?',
-      [insertId]
+      `INSERT INTO support_tickets (user_id, subject, category, priority, message, status)
+       VALUES ($1, $2, $3, $4, $5, 'open')
+       RETURNING *`,
+      [userId, subject.slice(0, 255), safeCategory, safePriority, message.slice(0, 10000)]
     )
 
     return NextResponse.json({
@@ -136,7 +131,7 @@ export async function PUT(request: NextRequest) {
 
     // ✅ SECURITY: Chỉ cho user cập nhật ticket của chính mình
     const ticket = await queryOne<any>(
-      'SELECT id, user_id FROM support_tickets WHERE id = ?',
+      'SELECT id, user_id FROM support_tickets WHERE id = $1',
       [ticketId]
     )
 
@@ -149,7 +144,7 @@ export async function PUT(request: NextRequest) {
     }
 
     await query(
-      'UPDATE support_tickets SET status = ?, updated_at = NOW() WHERE id = ?',
+      'UPDATE support_tickets SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [status, ticketId]
     )
 

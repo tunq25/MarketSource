@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { normalizeUserIdMySQL, getProductById, createPurchase, query, queryOne } from "@/lib/database-mysql"
+import { normalizeUserId, getProductById, createPurchase, query, queryOne, createBulkPurchase } from "@/lib/database"
 import { verifyFirebaseToken } from "@/lib/api-auth"
 import { logger } from "@/lib/logger"
 
@@ -25,14 +25,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Giỏ hàng trống hoặc dữ liệu không hợp lệ' }, { status: 400 });
     }
 
-    const dbUserId = await normalizeUserIdMySQL(authUser.uid, authUser.email || undefined);
+    const dbUserId = await normalizeUserId(authUser.uid, authUser.email || undefined);
     if (!dbUserId) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
     // ✅ Thực hiện thanh toán hàng loạt trong 1 transaction atomic
-    const { createBulkPurchaseMySQL } = await import('@/lib/database-mysql');
-    const result = await createBulkPurchaseMySQL({
+    const result = await createBulkPurchase({
       userId: dbUserId,
       items: items.map((it: any) => ({
         id: it.id,

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
-  approveDepositAndUpdateBalanceMySQL,
-  updateDepositStatusMySQL,
-  getUserByIdMySQL,
-  normalizeUserIdMySQL as normalizeUserId,
-  getUserIdByEmailMySQL as getUserIdByEmail,
-} from "@/lib/database-mysql"
+  approveDepositAndUpdateBalance,
+  updateDepositStatus,
+  getUserById,
+  normalizeUserId,
+  getUserIdByEmail,
+} from "@/lib/database"
 import { requireAdmin, validateRequest } from "@/lib/api-auth"
 import { userManager } from "@/lib/userManager"
 
@@ -57,10 +57,9 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ FIX: Query deposit state cho CẢ hai action (approve và reject)
-    // Để tránh trường hợp reject một phiếu đã được approve (gây mất dấu đối soát)
-    const { queryOne } = await import('@/lib/database-mysql');
+    const { queryOne } = await import('@/lib/database');
     const deposit = await queryOne<any>(
-      'SELECT id, user_id, amount, status FROM deposits WHERE id = ?',
+      'SELECT id, user_id, amount, status FROM deposits WHERE id = $1',
       [depositId]
     );
 
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'approve') {
 
-      // ✅ FIX: Validate userId match với deposit (Ép sang chuỗi để so sánh vì CSDL có thể trả ra BigInt là chuỗi)
+      // ✅ FIX: Validate userId match với deposit
       const depositUserId = deposit.user_id;
       const normalizedDepositUserId = await normalizeUserId(userId, userEmail);
 
@@ -92,7 +91,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ✅ FIX: Validate amount match với deposit (Sử dụng epsilon comparison để tránh sai lệch định dạng Decimal từ DB)
+      // ✅ FIX: Validate amount match với deposit
       const dbAmount = Number(deposit.amount);
       const reqAmount = Number(amount);
 
@@ -117,20 +116,18 @@ export async function POST(request: NextRequest) {
 
       // Use transaction-safe function để đảm bảo atomicity
       const adminEmail = process.env.ADMIN_EMAIL || 'admin';
-      const result = await approveDepositAndUpdateBalanceMySQL(
+      const result = await approveDepositAndUpdateBalance(
         parseInt(depositId),
         dbUserId,
         amount,
         adminEmail
       );
 
-      // Legacy sync with client-side storage is disabled (Unified Database Mode)
-
       // ✅ FIX: Tạo notification cho user khi deposit được approve
       try {
-        const { createNotification } = await import('@/lib/database-mysql');
+        const { createNotification } = await import('@/lib/database');
         await createNotification({
-          userId: dbUserId as string | number,
+          userId: Number(dbUserId),
           type: 'deposit_approved',
           message: `Yêu cầu nạp tiền ${amount.toLocaleString('vi-VN')}đ đã được duyệt. Số dư hiện tại: ${result.newBalance.toLocaleString('vi-VN')}đ`,
           isRead: false,
@@ -143,8 +140,8 @@ export async function POST(request: NextRequest) {
       // ✅ NEW: Gửi email thông báo nạp tiền thành công cho khách hàng
       try {
         const recipientEmail = userEmail || (await (async () => {
-          const { getUserByIdMySQL } = await import('@/lib/database-mysql');
-          const user = await getUserByIdMySQL(dbUserId);
+          const { getUserById } = await import('@/lib/database');
+          const user = await getUserById(dbUserId);
           return user?.email;
         })());
         if (recipientEmail) {
@@ -167,11 +164,11 @@ export async function POST(request: NextRequest) {
       }
 
       // Update deposit status to rejected
-      await updateDepositStatusMySQL(parseInt(depositId), 'rejected');
+      await updateDepositStatus(parseInt(depositId), 'rejected');
 
       // ✅ FIX: Tạo notification cho user khi deposit bị reject
       try {
-        const { createNotification } = await import('@/lib/database-mysql');
+        const { createNotification } = await import('@/lib/database');
         await createNotification({
           userId: dbUserIdForReject,
           type: 'deposit_rejected',

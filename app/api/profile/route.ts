@@ -5,7 +5,7 @@ import {
   getUserById,
   getUserProfileByUserId,
   upsertUserProfile,
-} from "@/lib/database-mysql"
+} from "@/lib/database"
 import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"
@@ -45,19 +45,23 @@ function sanitizeSocialLinks(input?: Record<string, string | null>) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const email = searchParams.get("email")
+    let email = searchParams.get("email")
     const userIdParam = searchParams.get("userId")
-
-    if (!email && !userIdParam) {
-      return NextResponse.json(
-        { success: false, error: "Thiếu email hoặc userId để truy vấn profile" },
-        { status: 400 }
-      )
-    }
 
     const { verifyFirebaseToken, requireAdmin } = await import("@/lib/api-auth");
     const authUser = await verifyFirebaseToken(request);
     const isAdmin = await requireAdmin(request).catch(() => false);
+
+    if (!email && !userIdParam) {
+      if (authUser?.email) {
+        email = authUser.email
+      } else {
+        return NextResponse.json(
+          { success: false, error: "Cần đăng nhập hoặc truyền email/userId" },
+          { status: 401 }
+        )
+      }
+    }
 
     if (!authUser && !isAdmin) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });

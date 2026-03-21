@@ -1,6 +1,38 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
+import { jwtVerify } from 'jose'
+
+/**
+ * Admin: NextAuth (role=admin) HOẶC cookie admin-token từ POST /api/admin-login (JWT jose, cùng secret với lib/jwt).
+ */
+async function isAdminAuthorized(request: NextRequest): Promise<boolean> {
+  try {
+    const nextAuth = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+    })
+    if (nextAuth && (nextAuth as { role?: string }).role === 'admin') {
+      return true
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const raw = request.cookies.get('admin-token')?.value
+  if (!raw) return false
+
+  const secretKey = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET
+  if (!secretKey) return false
+
+  try {
+    const secret = new TextEncoder().encode(secretKey)
+    const { payload } = await jwtVerify(raw, secret)
+    return payload.role === 'admin'
+  } catch {
+    return false
+  }
+}
 
 /**
  * ✅ SECURITY FIX: Middleware with authentication guard
@@ -27,14 +59,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/logoqtusdev.png', request.url))
   }
 
-  // ✅ SECURITY: Bảo vệ /admin routes — dùng NextAuth session duy nhất
+  // ✅ SECURITY: /admin — NextAuth admin HOẶC JWT cookie admin-token (đăng nhập qua /api/admin-login)
   if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
-    const token = await getToken({
-      req: request,
-      secret: process.env.NEXTAUTH_SECRET,
-    })
-
-    if (!token || token.role !== 'admin') {
+    const allowed = await isAdminAuthorized(request)
+    if (!allowed) {
       const loginUrl = new URL('/admin/login', request.url)
       loginUrl.searchParams.set('callbackUrl', pathname)
       return NextResponse.redirect(loginUrl)

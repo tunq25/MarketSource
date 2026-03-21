@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseToken, validateRequest } from '@/lib/api-auth';
-import { query, queryOne, getUserIdByEmail, createReview, getReviews, getProductAverageRating } from '@/lib/database-mysql';
+import { query, queryOne, getUserIdByEmail, createReview, getReviews, getProductAverageRating, pool } from '@/lib/database';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     
     // ✅ FIX: Enforce user phải mua sản phẩm trước khi review
     const purchaseCheck = await query<any>(
-      'SELECT id FROM purchases WHERE user_id = ? AND product_id = ?',
+      'SELECT id FROM purchases WHERE user_id = $1 AND product_id = $2',
       [userId, productId]
     );
     if (purchaseCheck.length === 0) {
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       }, { status: 403 });
     }
     
-    // Insert review (ON DUPLICATE KEY UPDATE để update nếu đã có review)
+    // Insert review
     const result = await createReview({
       userId,
       productId,
@@ -83,8 +83,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     logger.error('Review POST error', error);
     
-    // Handle unique constraint violation (MySQL error code 1062)
-    if (error.code === '23505' || error.code === 1062) {
+    // Handle unique constraint violation (PostgreSQL code 23505)
+    if (error.code === '23505') {
       return NextResponse.json({
         success: false,
         error: 'Bạn đã đánh giá sản phẩm này rồi'
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
       
       // Get min/max từ reviews
       const minMaxResult = await queryOne<any>(
-        'SELECT MIN(rating) as min_rating, MAX(rating) as max_rating FROM reviews WHERE product_id = ?',
+        'SELECT MIN(rating) as min_rating, MAX(rating) as max_rating FROM reviews WHERE product_id = $1',
         [parseInt(productIdParam)]
       );
       
@@ -179,12 +179,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing reviewId' }, { status: 400 });
     }
 
-    const result = await query<any>(
-      'DELETE FROM reviews WHERE id = ? AND user_id = ?',
+    const result = await pool.query(
+      'DELETE FROM reviews WHERE id = $1 AND user_id = $2',
       [reviewId, userId]
     );
 
-    const affectedRows = (result as any).affectedRows || 0;
+    const affectedRows = result.rowCount || 0;
     if (affectedRows === 0) {
       return NextResponse.json({ success: false, error: 'Review not found or unauthorized' }, { status: 404 });
     }

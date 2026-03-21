@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseToken } from '@/lib/api-auth';
-import { getUserIdByEmail, query, queryOne } from '@/lib/database-mysql';
+import { getUserIdByEmail, query } from '@/lib/database';
 import { checkRateLimitAndRespond } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
         END as status,
         uc.used_at
       FROM coupons c
-      LEFT JOIN user_coupons uc ON c.id = uc.coupon_id AND uc.user_id = ?
+      LEFT JOIN user_coupons uc ON c.id = uc.coupon_id AND uc.user_id = $1
       WHERE c.is_active = TRUE
         AND (c.valid_from IS NULL OR c.valid_from <= NOW())
         AND (c.valid_until IS NULL OR c.valid_until >= NOW())

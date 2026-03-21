@@ -1,10 +1,6 @@
 "use client"
 
-import dynamic from "next/dynamic"
-
-const HeroSection = dynamic(() => import("@/components/hero-section").then(mod => ({ default: mod.HeroSection })), {
-  ssr: false,
-})
+import { HeroSection } from "@/components/hero-section"
 import { FeaturesSection } from "@/components/features-section"
 import { ProductsSection } from "@/components/products-section"
 import { StatsSection } from "@/components/stats-section"

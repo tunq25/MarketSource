@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createNotification } from "@/lib/database-mysql"
+import { createNotification, getNotifications, getUserIdByEmail } from "@/lib/database"
 import { verifyFirebaseToken, requireAdmin } from "@/lib/api-auth"
-import { getUserIdByEmail } from "@/lib/database-mysql"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// ✅ FIX: Migrate từ mysql.ts sang PostgreSQL
 export async function POST(request: NextRequest) {
   try {
-    // Require admin authentication để tạo notification
     await requireAdmin(request);
 
     const body = await request.json()
@@ -22,12 +19,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Normalize userId: convert string uid to PostgreSQL INT
     let dbUserId: number;
     if (typeof userId === 'number') {
       dbUserId = userId;
     } else {
-      // Try to get user ID by email
       const normalizedUserId = await getUserIdByEmail(userEmail || '');
       if (!normalizedUserId) {
         return NextResponse.json(
@@ -38,7 +33,6 @@ export async function POST(request: NextRequest) {
       dbUserId = normalizedUserId;
     }
 
-    // Combine title and message using markdown syntax
     const finalMessage = title ? `**${title}**\n${message}` : message;
 
     const result = await createNotification({
@@ -66,7 +60,6 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ FIX: Thêm rate limiting
     const { checkRateLimitAndRespond } = await import('@/lib/rate-limit');
     const rateLimitResponse = await checkRateLimitAndRespond(request, 30, 10, 'notifications-get');
     if (rateLimitResponse) {
@@ -74,7 +67,6 @@ export async function GET(request: NextRequest) {
     }
 
     const authUser = await verifyFirebaseToken(request);
-    const { requireAdmin } = await import('@/lib/api-auth');
     const isAdmin = await requireAdmin(request).catch(() => false);
 
     if (!authUser && !isAdmin) {
@@ -84,9 +76,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { getNotifications, getUserIdByEmail } = await import('@/lib/database-mysql');
-    
-    // Ưu tiên authUser, nếu không có lấy email của Admin
     const userEmail = authUser?.email || (isAdmin as any)?.email || '';
     const userId = await getUserIdByEmail(userEmail);
 
@@ -98,10 +87,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const isReadParam = searchParams.get('isRead');
-    const isRead = isReadParam === 'true' ? true : isReadParam === 'false' ? false : undefined;
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? Math.min(parseInt(limitParam), 100) : 20;
 
-    const notifications = await getNotifications(userId, isRead);
+    const notifications = await getNotifications(userId, limit);
 
     return NextResponse.json({ success: true, notifications });
   } catch (error: any) {

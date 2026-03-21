@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getPurchases, createPurchase, getProductById, getUserIdByEmail, normalizeUserIdMySQL, processReferralCommissionMySQL } from "@/lib/database-mysql"
+import { getPurchases, createPurchase, getProductById, getUserIdByEmail, normalizeUserId, createNotification, createChat } from "@/lib/database"
 import { verifyFirebaseToken, validateRequest } from "@/lib/api-auth"
 import { purchaseSchema } from "@/lib/validation-schemas"
 import { notifyPurchaseSuccess, notifyReferralCommission } from "@/lib/notifications"
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       // Nếu là number (DB ID), cần convert sang email để so sánh
       if (!isNaN(Number(purchaseData.userId))) {
         // Là DB ID, cần check bằng email
-        const { getUserByIdMySQL: getUserById } = await import('@/lib/database-mysql');
+        const { getUserById } = await import('@/lib/database');
         const user = await getUserById(Number(purchaseData.userId));
         if (user && user.email !== authUser.email) {
           return NextResponse.json({
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ FIX: Normalize userId - nếu là string (uid), dùng email để tìm DB ID
-    const dbUserId = await normalizeUserIdMySQL(
+    const dbUserId = await normalizeUserId(
       purchaseData.userId || authUser.uid,
       authUser.email || undefined,
     )
@@ -177,11 +177,11 @@ export async function POST(request: NextRequest) {
 
     // ✅ FIX: Xử lý hoa hồng giới thiệu (Referral Commission)
     try {
-      const commissionResult = await processReferralCommissionMySQL(dbUserIdNum, purchaseData.amount);
+      const { processReferralCommission } = await import('@/lib/database');
+      const commissionResult = await processReferralCommission(dbUserIdNum, result.amount);
       if (commissionResult) {
-        // Lấy thông tin người giới thiệu để gửi thông báo chi tiết
-        const { getUserByIdMySQL } = await import('@/lib/database-mysql');
-        const referrer = await getUserByIdMySQL(commissionResult.referrerId);
+        const { getUserById } = await import('@/lib/database');
+        const referrer = await getUserById(commissionResult.referrerId);
         
         await notifyReferralCommission({
           referrerEmail: referrer?.email || 'Admin',
@@ -191,8 +191,7 @@ export async function POST(request: NextRequest) {
         });
 
         // Tạo thông báo trong DB cho người giới thiệu
-        const { createNotificationMySQL } = await import('@/lib/database-mysql');
-        await createNotificationMySQL({
+        await createNotification({
           userId: commissionResult.referrerId,
           type: 'referral',
           message: `Bạn vừa nhận được ${commissionResult.commissionAmount.toLocaleString()}đ hoa hồng từ một giao dịch của người bạn giới thiệu!`,
@@ -217,7 +216,6 @@ export async function POST(request: NextRequest) {
 
     // ✅ Gửi tin nhắn qua hệ thống Chat nội bộ của Dashboard
     try {
-      const { createChat } = await import('@/lib/database-mysql');
       await createChat({
         userId: dbUserIdNum,
         adminId: null, // Tin nhắn tự động từ hệ thống

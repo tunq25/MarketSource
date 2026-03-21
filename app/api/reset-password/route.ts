@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import bcrypt from "bcryptjs"
-import { findValidPasswordResetToken, consumePasswordResetToken, updateUserPasswordHash, getUserByEmail } from "@/lib/database-mysql"
+import { findValidPasswordResetToken, consumePasswordResetToken, updateUserPasswordHash, getUserByEmail } from "@/lib/database"
 import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"

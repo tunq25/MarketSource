@@ -3,7 +3,7 @@
  * Quản lý ratings cho products
  */
 
-import { query as mysqlQuery } from './database-mysql';
+import { query } from './database';
 import { logger } from './logger';
 
 /**
@@ -11,13 +11,12 @@ import { logger } from './logger';
  */
 export async function getProductRating(productId: number) {
   try {
-    const rows = await mysqlQuery<any>(
-      'SELECT * FROM product_ratings WHERE product_id = ?',
+    const rows = await query<any>(
+      'SELECT * FROM product_ratings WHERE product_id = $1',
       [productId]
     );
 
     if (rows.length === 0) {
-      // Nếu chưa có rating, trả về default
       return {
         product_id: productId,
         average_rating: 0,
@@ -48,13 +47,11 @@ export async function getProductRatings(productIds: number[]) {
       return [];
     }
 
-    // MySQL: dùng IN (?) với mảng id
-    const rows = await mysqlQuery<any>(
-      'SELECT * FROM product_ratings WHERE product_id IN (?)',
+    const rows = await query<any>(
+      'SELECT * FROM product_ratings WHERE product_id = ANY($1)',
       [productIds]
     );
 
-    // Map để đảm bảo tất cả products đều có rating (default 0 nếu chưa có)
     const ratingsMap = new Map(
       rows.map((row: any) => [
         row.product_id,
@@ -67,7 +64,6 @@ export async function getProductRatings(productIds: number[]) {
       ])
     );
 
-    // Thêm default rating cho products chưa có
     productIds.forEach((id) => {
       if (!ratingsMap.has(id)) {
         ratingsMap.set(id, {
@@ -91,7 +87,7 @@ export async function getProductRatings(productIds: number[]) {
  */
 export async function getTopRatedProducts(limit: number = 10) {
   try {
-    const rows = await mysqlQuery<any>(
+    const rows = await query<any>(
       `SELECT 
         pr.*,
         p.title,
@@ -103,7 +99,7 @@ export async function getTopRatedProducts(limit: number = 10) {
        JOIN products p ON pr.product_id = p.id
        WHERE pr.total_ratings > 0 AND p.is_active = TRUE
        ORDER BY pr.average_rating DESC, pr.total_ratings DESC
-       LIMIT ?`,
+       LIMIT $1`,
       [limit]
     );
 
@@ -128,20 +124,20 @@ export async function getTopRatedProducts(limit: number = 10) {
  */
 export async function recalculateProductRating(productId: number) {
   try {
-    await mysqlQuery(
+    await query(
       `INSERT INTO product_ratings (product_id, average_rating, total_ratings, updated_at)
        SELECT 
          product_id,
          ROUND(AVG(rating), 2) as average_rating,
          COUNT(*) as total_ratings,
-         NOW()
+         CURRENT_TIMESTAMP
        FROM reviews
-       WHERE product_id = ?
+       WHERE product_id = $1
        GROUP BY product_id
-       ON DUPLICATE KEY UPDATE
-         average_rating = VALUES(average_rating),
-         total_ratings = VALUES(total_ratings),
-         updated_at = VALUES(updated_at)`,
+       ON CONFLICT (product_id) DO UPDATE SET
+         average_rating = EXCLUDED.average_rating,
+         total_ratings = EXCLUDED.total_ratings,
+         updated_at = EXCLUDED.updated_at`,
       [productId]
     );
 
@@ -157,7 +153,7 @@ export async function recalculateProductRating(productId: number) {
  */
 export async function getRatingStatistics() {
   try {
-    const rows = await mysqlQuery<any>(
+    const rows = await query<any>(
       `SELECT 
         COUNT(*) as total_products_with_ratings,
         AVG(average_rating) as overall_average_rating,
@@ -191,4 +187,3 @@ export async function getRatingStatistics() {
     throw error;
   }
 }
-

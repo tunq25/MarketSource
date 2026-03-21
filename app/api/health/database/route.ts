@@ -1,4 +1,4 @@
-import { query, queryOne } from '@/lib/database-mysql';
+import { query, queryOne } from '@/lib/database';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 

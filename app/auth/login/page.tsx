@@ -44,6 +44,17 @@ function LoginPageContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [rememberMe, setRememberMe] = useState(false)
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && localStorage.getItem("pref-remember-login") === "true") {
+        setRememberMe(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   const logSyncStatus = (
     user: { uid?: string; email?: string; provider?: string },
@@ -102,12 +113,13 @@ function LoginPageContent() {
           const response = await fetch('/api/auth-callback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({
               uid: (session.user as any).id || `social_${Date.now()}`,
               email: session.user.email,
               name: session.user.name,
               avatarUrl: session.user.image,
-              provider: (session.user as any).provider || 'google',
+              provider: (session.user as any).provider || 'oauth',
               ipAddress: ipAddress
             })
           });
@@ -235,6 +247,7 @@ function LoginPageContent() {
           deviceInfo,
           ipAddress,
           captchaToken,
+          rememberMe,
         }),
       });
 
@@ -382,9 +395,11 @@ function LoginPageContent() {
             </div>
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">Ghi nhớ đăng nhập</span>

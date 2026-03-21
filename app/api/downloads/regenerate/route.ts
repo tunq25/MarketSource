@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getClientIP, verifyFirebaseToken } from '@/lib/api-auth'
-import { getUserIdByEmail, queryOne, trackDownload } from '@/lib/database-mysql'
+import { getUserIdByEmail, queryOne, trackDownload } from '@/lib/database'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     const download = await queryOne<any>(
-      'SELECT id, product_id FROM downloads WHERE id = ? AND user_id = ?',
+      'SELECT id, product_id FROM downloads WHERE id = $1 AND user_id = $2',
       [recordId, userId]
     )
 

@@ -88,6 +88,7 @@ class UserManager {
       const response = await fetch("/api/save-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
       })
 
@@ -117,9 +118,22 @@ class UserManager {
     // Trong NextAuth, nên dùng useSession hook thay cho userManager.getUser()
     // Tuy nhiên để tương thích, ta có thể fetch profile hiện tại.
     try {
-      const response = await fetch("/api/profile", { cache: "no-store" })
+      const response = await fetch("/api/profile", {
+        cache: "no-store",
+        credentials: "include",
+      })
       const data = await response.json().catch(() => null)
-      return data?.user || null
+      if (!data?.success || !data?.profile) return null
+      const p = data.profile
+      return {
+        uid: String(p.id),
+        id: p.id,
+        email: p.email,
+        name: p.name,
+        displayName: p.name,
+        avatar: p.avatarUrl,
+        avatar_url: p.avatarUrl,
+      } as UserData
     } catch {
       return null
     }

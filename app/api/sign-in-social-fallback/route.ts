@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, createOrUpdateUser } from '@/lib/database-mysql';
+import { getUserByEmail, createOrUpdateUser } from '@/lib/database';
 import { getClientIP } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
+import { readJsonBody } from '@/lib/parse-json-body';
 
 export const runtime = 'nodejs'
 
@@ -11,10 +12,24 @@ export const runtime = 'nodejs'
 export async function POST(request: NextRequest) {
   let providerType: string | undefined;
   try {
-    const body = await request.json();
-    providerType = body.providerType;
-    const { deviceInfo, ipAddress: providedIp, email, name, avatarUrl, uid } = body;
-    
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { user: null, error: parsed.error },
+        { status: parsed.status }
+      );
+    }
+    const body = parsed.data as Record<string, unknown>;
+    providerType = typeof body.providerType === "string" ? body.providerType : undefined;
+    const email = typeof body.email === "string" ? body.email : undefined;
+    const name = typeof body.name === "string" ? body.name : undefined;
+    const uid = typeof body.uid === "string" ? body.uid : undefined;
+    const providedIp = typeof body.ipAddress === "string" ? body.ipAddress : undefined;
+    const avatarUrl =
+      (typeof body.avatarUrl === "string" && body.avatarUrl) ||
+      (typeof body.image === "string" && body.image) ||
+      undefined;
+
     if (!email || !uid) {
       return NextResponse.json(
         { user: null, error: 'Email and UID are required' },

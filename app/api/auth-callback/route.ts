@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getClientIP } from '@/lib/api-auth';
-import { createOrUpdateUser } from '@/lib/database-mysql';
+import { createOrUpdateUser } from '@/lib/database';
 import { logger } from '@/lib/logger';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/next-auth";
+import { readJsonBody } from '@/lib/parse-json-body';
 
 export const runtime = 'nodejs'
 
@@ -56,16 +57,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { success: false, error: parsed.error },
+        { status: parsed.status }
+      );
+    }
+    const body = parsed.data;
     const {
       email,
       name,
       username,
-      avatarUrl,
       provider,
       uid,
       ipAddress: providedIp,
-    } = body;
+    } = body as {
+      email?: string;
+      name?: string;
+      username?: string;
+      provider?: string;
+      uid?: string;
+      ipAddress?: string;
+    };
+    const avatarUrl =
+      (typeof body.avatarUrl === 'string' && body.avatarUrl) ||
+      (typeof body.image === 'string' && body.image) ||
+      undefined;
 
     if (!email || !uid) {
       return NextResponse.json(
@@ -107,7 +125,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ FIX: Lấy user data đầy đủ từ database để trả về balance (Using consistent library)
-    const { getUserByIdMySQL: getUserById } = await import('@/lib/database-mysql');
+    const { getUserById } = await import('@/lib/database');
     const fullUser = await getUserById(result.id);
     
     return NextResponse.json({

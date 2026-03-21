@@ -2,7 +2,7 @@ export const runtime = 'nodejs'
 
 // /app/api/check-deposits-schema/route.ts
 import { NextResponse, NextRequest } from "next/server";
-import { query } from "@/lib/database-mysql";
+import { query } from "@/lib/database";
 import { requireAdmin } from "@/lib/api-auth";
 
 /**

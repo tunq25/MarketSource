@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { query, createNotificationMySQL } from "@/lib/database-mysql"
+import { query, createNotification } from "@/lib/database"
 import { requireAdmin } from "@/lib/api-auth"
 import { logger } from "@/lib/logger"
 import { sendEmail } from "@/lib/email"
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
             )
         } else {
             const user = await query<any>(
-                "SELECT id, email, name FROM users WHERE id = ?",
+                "SELECT id, email, name FROM users WHERE id = $1",
                 [userId]
             )
             if (user && user.length > 0) {
@@ -52,10 +52,9 @@ export async function POST(request: NextRequest) {
             // System Notification
             if (sendSystem !== false) {
                 try {
-                    await createNotificationMySQL({
+                    await createNotification({
                         userId: user.id,
                         type: type || 'system',
-                        title: title || 'Thông báo hệ thống',
                         message: message,
                         isRead: false
                     })

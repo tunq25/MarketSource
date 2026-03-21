@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProductById, updateProduct, deleteProduct } from '@/lib/database-mysql';
+import { getProductById, updateProduct, deleteProduct } from '@/lib/database';
 import { verifyFirebaseToken, requireAdmin, validateRequest } from '@/lib/api-auth';
 import { checkRateLimitAndRespond } from '@/lib/rate-limit';
 import { updateProductSchema } from '@/lib/validation-schemas';
@@ -128,7 +128,6 @@ export async function PUT(
       detailedDescription: (productData as any).detailedDescription ?? undefined,
       tags: productData.tags ?? undefined,
       isActive: productData.isActive ?? undefined,
-      isFeatured: productData.isFeatured ?? undefined, // ✅ FIX: Thêm isFeatured
       averageRating: productData.averageRating ?? undefined,
       downloadCount: productData.downloadCount ?? undefined,
     });

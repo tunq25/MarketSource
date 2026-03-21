@@ -6,8 +6,26 @@
 /**
  * Map backend product format → frontend format
  */
+function parseImageUrlsList(raw: any): string[] {
+  if (Array.isArray(raw)) return raw.filter(Boolean);
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {
+      return raw.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+  }
+  return [];
+}
+
 export function mapBackendToFrontend(backendProduct: any): any {
-  const imageUrl = backendProduct.image_url || backendProduct.thumbnail || null;
+  const imageUrlsList = parseImageUrlsList(backendProduct.image_urls);
+  const imageUrl =
+    backendProduct.image_url ||
+    backendProduct.thumbnail ||
+    imageUrlsList[0] ||
+    null;
   const averageRating = Number(backendProduct.average_rating) || 0;
   const downloadCount = parseInt(backendProduct.download_count || '0');
   const createdAt = backendProduct.created_at || new Date().toISOString();
@@ -23,15 +41,7 @@ export function mapBackendToFrontend(backendProduct: any): any {
     category: backendProduct.category || null,
     imageUrl,
     image: imageUrl,
-    imageUrls: (() => {
-      const raw = backendProduct.image_urls;
-      if (Array.isArray(raw)) return raw.filter(Boolean);
-      if (typeof raw === 'string' && raw.trim()) {
-        try { return JSON.parse(raw).filter(Boolean); } catch {}
-        return raw.split(',').map((s: string) => s.trim()).filter(Boolean);
-      }
-      return [];
-    })(),
+    imageUrls: imageUrlsList,
     downloadUrl: backendProduct.download_url || null,
     downloadLink: backendProduct.download_url || null,
     demoUrl: backendProduct.demo_url || null,

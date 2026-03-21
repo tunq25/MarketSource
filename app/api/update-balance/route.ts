@@ -30,7 +30,7 @@ export async function PUT(request: NextRequest) {
     if (typeof userId === 'number') {
       dbUserId = userId
     } else if (userEmail) {
-      const { getUserIdByEmail } = await import('@/lib/database-mysql')
+      const { getUserIdByEmail } = await import('@/lib/database')
       dbUserId = await getUserIdByEmail(userEmail)
     }
 
@@ -39,9 +39,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update balance trong PostgreSQL
-    const { query } = await import('@/lib/database-mysql')
+    const { query } = await import('@/lib/database')
     await query(
-      'UPDATE users SET balance = ?, updated_at = NOW() WHERE id = ?',
+      'UPDATE users SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [newBalance, dbUserId]
     )
 

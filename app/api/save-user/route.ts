@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getClientIP, requireAdmin } from '@/lib/api-auth';
-import { createOrUpdateUser } from '@/lib/database-mysql';
+import { getClientIP } from '@/lib/api-auth';
+import { createOrUpdateUser } from '@/lib/database';
 import { logger } from '@/lib/logger';
+import { readJsonBody } from '@/lib/parse-json-body';
 
 export const runtime = 'nodejs'
 
@@ -12,15 +13,20 @@ export const runtime = 'nodejs'
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const {
-      email,
-      name,
-      username,
-      avatarUrl,
-      provider,
-      ipAddress: providedIp,
-    } = body;
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { success: false, error: parsed.error },
+        { status: parsed.status }
+      );
+    }
+    const body = parsed.data as Record<string, unknown>;
+    const email =
+      typeof body.email === 'string' ? body.email.trim().toLowerCase() : undefined;
+    const name = typeof body.name === 'string' ? body.name : undefined;
+    const username = typeof body.username === 'string' ? body.username : undefined;
+    const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl : undefined;
+    const providedIp = typeof body.ipAddress === 'string' ? body.ipAddress : undefined;
 
     if (!email) {
       return NextResponse.json(
@@ -58,7 +64,10 @@ export async function POST(request: NextRequest) {
       } catch { /* Ignore */ }
     }
 
-    if (!authenticatedEmail || authenticatedEmail !== email) {
+    if (
+      !authenticatedEmail ||
+      authenticatedEmail.trim().toLowerCase() !== email
+    ) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized profile update request' },
         { status: 401 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyFirebaseToken } from '@/lib/api-auth'
-import { getUserIdByEmail, query } from '@/lib/database-mysql'
+import { getUserIdByEmail, query } from '@/lib/database'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -28,12 +28,11 @@ export async function DELETE(
 
     // Xóa session thuộc về user này
     const result = await query(
-      'DELETE FROM user_sessions WHERE id = ? AND user_id = ?',
+      'DELETE FROM user_sessions WHERE id = $1 AND user_id = $2 RETURNING id',
       [id, dbUserId]
     )
 
-    const affectedRows = (result as any).affectedRows || 0
-    if (affectedRows === 0) {
+    if (result.length === 0) {
       return NextResponse.json({ success: false, error: 'Session not found or unauthorized' }, { status: 404 })
     }
 
@@ -68,12 +67,11 @@ export async function PUT(
 
     // Cập nhật is_trusted
     const result = await query(
-      'UPDATE user_sessions SET is_trusted = 1 WHERE id = ? AND user_id = ?',
+      'UPDATE user_sessions SET is_trusted = true WHERE id = $1 AND user_id = $2 RETURNING id',
       [id, dbUserId]
     )
 
-    const affectedRows = (result as any).affectedRows || 0
-    if (affectedRows === 0) {
+    if (result.length === 0) {
       return NextResponse.json({ success: false, error: 'Session not found or unauthorized' }, { status: 404 })
     }
 

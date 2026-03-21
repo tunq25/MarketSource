@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyFirebaseToken } from "@/lib/api-auth"
-import { getUserByEmail, saveUserTwoFactorSecret } from "@/lib/database-mysql"
+import { getUserByEmail, saveUserTwoFactorSecret } from "@/lib/database"
 import { generateTwoFactorSecret, generateQRCodeData, generateBackupCodes, verifyTwoFactorToken } from "@/lib/twofactor"
 import { logger } from "@/lib/logger"
 

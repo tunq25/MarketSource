@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { uploadAvatarFile } from "@/lib/storage/avatar"
-import { createOrUpdateUser } from "@/lib/database-mysql"
+import { createOrUpdateUser } from "@/lib/database"
 import { logger } from "@/lib/logger"
 import { verifyFirebaseToken } from "@/lib/api-auth"
 

@@ -1,10 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query, queryOne } from '@/lib/database-mysql'
+import { query, pool } from '@/lib/database'
 import { logger } from '@/lib/logger'
 import { requireAdmin } from '@/lib/api-auth'
 import { checkRateLimitAndRespond } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
+
+const SENSITIVE_ENV_KEYS: Record<string, string[]> = {
+    telegramBotToken: ['TELEGRAM_BOT_TOKEN'],
+    telegramChatId: ['TELEGRAM_CHAT_ID'],
+    whatsappNumber: ['TWILIO_WHATSAPP_NUMBER'],
+    geminiApiKey: ['GEMINI_API_KEY'],
+    hcaptchaSecret: ['HCAPTCHA_SECRET_KEY'],
+    hcaptchaSiteKey: ['HCAPTCHA_SITE_KEY', 'NEXT_PUBLIC_HCAPTCHA_SITE_KEY'],
+    smtpHost: ['SMTP_HOST'],
+    smtpUser: ['SMTP_USER'],
+    smtpPass: ['SMTP_PASS', 'SMTP_PASSWORD'],
+}
+
+const ADMIN_ENV_BACKFILL_KEYS: Record<string, string[]> = {
+    telegramChatId: ['TELEGRAM_CHAT_ID'],
+    whatsappNumber: ['TWILIO_WHATSAPP_NUMBER'],
+    hcaptchaSiteKey: ['HCAPTCHA_SITE_KEY', 'NEXT_PUBLIC_HCAPTCHA_SITE_KEY'],
+    smtpHost: ['SMTP_HOST'],
+    smtpUser: ['SMTP_USER'],
+}
 
 // ✅ SECURITY FIX: Allowlist — chỉ những key này được trả về cho public GET (không cần auth)
 const PUBLIC_SETTINGS_KEYS = new Set([
@@ -129,13 +149,11 @@ export async function PUT(request: NextRequest) {
                     continue
                 }
 
-                // ✅ BRIDGE: Dùng syntax ON DUPLICATE KEY UPDATE (MySQL) 
-                // Bridge PostgreSQL sẽ tự động chuyển sang ON CONFLICT ("key") DO UPDATE SET
                 await query(
-                    `INSERT INTO settings (\`key\`, value) 
-                     VALUES (?, ?) 
-                     ON DUPLICATE KEY UPDATE value = ?`,
-                    [key, valStr, valStr]
+                    `INSERT INTO settings ("key", value) 
+                     VALUES ($1, $2) 
+                     ON CONFLICT ("key") DO UPDATE SET value = $2`,
+                    [key, valStr]
                 )
             }
         }

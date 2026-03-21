@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyFirebaseToken, getClientIP } from '@/lib/api-auth'
-import { getUserIdByEmail, query } from '@/lib/database-mysql'
+import { getUserIdByEmail, query } from '@/lib/database'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
             is_trusted,
             created_at
           FROM user_sessions
-          WHERE user_id = ?
+          WHERE user_id = $1
           ORDER BY last_activity DESC
           LIMIT 20
         `, [dbUserId])

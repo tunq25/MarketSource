@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminToken } from '@/lib/jwt'
-import { getUserByEmail } from '@/lib/database-mysql'
+import { getUserByEmail } from '@/lib/database'
 import { z } from 'zod'
 import bcryptjs from 'bcryptjs'
 import { logger } from '@/lib/logger'

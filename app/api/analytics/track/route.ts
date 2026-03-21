@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseToken } from '@/lib/api-auth';
-import { getUserIdByEmail } from '@/lib/database-mysql';
-import { trackEvent, trackProductView } from '@/lib/database-enhancements';
+import { getUserIdByEmail, trackAnalyticsEvent as trackEvent, trackProductView } from '@/lib/database';
 import { getClientIP } from '@/lib/api-auth';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
@@ -34,11 +33,17 @@ export async function POST(request: NextRequest) {
 
     // Special handling for product_view event
     if (eventType === 'product_view' && eventData?.productId) {
-      await trackProductView(eventData.productId, userId || undefined, ipAddress);
+      await trackProductView(eventData.productId, ipAddress);
     }
 
     // Track general event
-    await trackEvent(eventType, eventData || {}, userId || undefined, ipAddress, userAgent);
+    await trackEvent({
+      eventType,
+      eventData: eventData || {},
+      userId: userId || null,
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

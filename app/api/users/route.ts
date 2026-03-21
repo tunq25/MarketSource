@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { query, getUserByIdMySQL, getUserByEmailMySQL, createOrUpdateUserMySQL, getUserIdByEmailMySQL } from "@/lib/database-mysql"
+import { query, getUserById, getUserByEmail, createOrUpdateUser, getUserIdByEmail } from "@/lib/database"
 import { verifyFirebaseToken, requireAdmin } from "@/lib/api-auth"
 import { logger } from "@/lib/logger"
 
@@ -42,14 +42,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ data: null, error: 'Invalid user ID' }, { status: 400 });
       }
 
-      const user = await getUserByIdMySQL(userIdNum);
+      const user = await getUserById(userIdNum);
       if (!user) {
         return NextResponse.json({ data: null, error: 'User not found' }, { status: 404 });
       }
 
       // User chỉ xem được data của mình, admin xem được tất cả
       if (!isAdmin) {
-        const currentUserId = await getUserIdByEmailMySQL(authUser?.email || '')
+        const currentUserId = await getUserIdByEmail(authUser?.email || '')
         if (String(currentUserId) !== String(user.id)) {
           return NextResponse.json({ error: 'Unauthorized access to other user profile' }, { status: 403 })
         }
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     // Get user by email
     if (email) {
-      const user = await getUserByEmailMySQL(email)
+      const user = await getUserByEmail(email)
       if (!user) {
         return NextResponse.json({ data: null, error: 'User not found' }, { status: 404 })
       }
@@ -122,7 +122,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
     }
 
-    const currentUserId = await getUserIdByEmailMySQL(authUser.email || '')
+    const currentUserId = await getUserIdByEmail(authUser.email || '')
     const isAdmin = await requireAdmin(request).catch(() => false)
 
     if (!isAdmin && currentUserId !== userIdNum) {
@@ -130,7 +130,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // ✅ FIX: Lấy email từ user hiện tại nếu không có trong userData
-    const currentUser = await getUserByIdMySQL(userIdNum);
+    const currentUser = await getUserById(userIdNum);
     if (!currentUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
@@ -148,7 +148,7 @@ export async function PUT(request: NextRequest) {
       updateData.role = userData.role;
     }
 
-    await createOrUpdateUserMySQL(updateData)
+    await createOrUpdateUser(updateData)
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, createOrUpdateUser } from '@/lib/database-mysql';
+import { getUserByEmail, createOrUpdateUser } from '@/lib/database';
 import { getClientIP } from '@/lib/api-auth';
 import bcrypt from 'bcryptjs';
 
@@ -85,8 +85,11 @@ export async function POST(request: NextRequest) {
     // Validate referral code before creating user to avoid partial-success state
     let referrer: { id: number; email?: string | null } | null = null
     if (referralCode) {
-      const { getReferralByCodeMySQL } = await import('@/lib/database-mysql')
-      referrer = await getReferralByCodeMySQL(referralCode)
+      const { queryOne } = await import('@/lib/database')
+      referrer = await queryOne<{ id: number; email?: string | null }>(
+        'SELECT id, email FROM users WHERE referral_code = $1',
+        [referralCode]
+      )
 
       if (!referrer) {
         return NextResponse.json(
@@ -127,13 +130,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ FIX: Lấy user data đầy đủ từ database để trả về balance và gán thông báo
-    const { getUserById, createNotificationMySQL } = await import('@/lib/database-mysql');
+    const { getUserById, createNotification } = await import('@/lib/database');
     const fullUser = await getUserById(result.id);
 
     // ✅ Tự động tạo Welcome Notification
     try {
       if (result.id) {
-        await createNotificationMySQL({
+        await createNotification({
           userId: result.id,
           type: 'system',
           message: `Chào mừng bạn đến với Market Source! Khám phá kho mã nguồn chất lượng cao ngay hôm nay.`,
@@ -181,8 +184,8 @@ export async function POST(request: NextRequest) {
     // Link referral only after successful account creation
     if (referrer && result.id) {
       try {
-        const { createReferralMySQL } = await import('@/lib/database-mysql');
-        await createReferralMySQL(referrer.id, result.id);
+        const { createReferral } = await import('@/lib/database');
+        await createReferral(referrer.id, result.id);
         const { logger } = await import('@/lib/logger');
         logger.info('Referral linked successfully', { referrerId: referrer.id, referredId: result.id });
       } catch (refError) {
@@ -240,7 +243,7 @@ export async function POST(request: NextRequest) {
             });
 
             if (retryResult && retryResult.id) {
-              const { getUserById } = await import('@/lib/database-mysql');
+              const { getUserById } = await import('@/lib/database');
               const fullUser = await getUserById(retryResult.id);
 
               return NextResponse.json({

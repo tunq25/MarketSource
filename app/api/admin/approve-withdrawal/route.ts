@@ -3,9 +3,9 @@ import {
   approveWithdrawalAndUpdateBalance,
   updateWithdrawalStatus,
   getUserById,
-  normalizeUserIdMySQL as normalizeUserId,
+  normalizeUserId,
   getUserIdByEmail,
-} from "@/lib/database-mysql"
+} from "@/lib/database"
 import { requireAdmin, validateRequest } from "@/lib/api-auth"
 // ✅ FIX: Removed static import of client-only userManager (uses localStorage)
 
@@ -57,10 +57,9 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ FIX: Query withdrawal state cho CẢ hai action (approve và reject)
-    // Để tránh trường hợp thao tác nhầm vào phiếu đã được xử lý
-    const { queryOne } = await import('@/lib/database-mysql');
+    const { queryOne } = await import('@/lib/database');
     const withdrawal = await queryOne<any>(
-      'SELECT id, user_id, amount, status FROM withdrawals WHERE id = ?',
+      'SELECT id, user_id, amount, status FROM withdrawals WHERE id = $1',
       [withdrawalId]
     );
 
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'approve') {
 
-      // ✅ FIX: Validate userId match với withdrawal (Ép sang chuỗi để so sánh vì CSDL kết xuất BigInt là chuỗi)
+      // ✅ FIX: Validate userId match với withdrawal
       const withdrawalUserId = withdrawal.user_id;
       const normalizedWithdrawalUserId = await normalizeUserId(userId, userEmail);
 
@@ -92,7 +91,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ✅ FIX: Validate amount match với withdrawal (Sử dụng epsilon comparison để tránh sai lệch định dạng Decimal từ DB)
+      // ✅ FIX: Validate amount match với withdrawal
       const dbAmount = Number(withdrawal.amount);
       const reqAmount = Number(amount);
 
@@ -128,7 +127,7 @@ export async function POST(request: NextRequest) {
       const { logAdminAction } = await import('@/lib/audit-logger');
       const adminId = (admin as any).userId || (admin as any).uid || 'unknown';
       await logAdminAction({
-        adminId: typeof adminId === 'number' ? adminId : 0, // Fallback to 0 if not a numeric DB ID
+        adminId: typeof adminId === 'number' ? adminId : 0,
         adminEmail: (admin as any).email || 'unknown',
         action: 'APPROVE_WITHDRAWAL',
         targetType: 'withdrawal',
@@ -138,7 +137,6 @@ export async function POST(request: NextRequest) {
       });
 
       // ✅ FIX: userManager is client-side only — balance already updated in DB
-      // Client-side sync happens automatically via userUpdated event
       const { logger } = await import('@/lib/logger');
       logger.info('Withdrawal approved, balance updated in DB', { 
         withdrawalId, userId, newBalance: result.newBalance 
@@ -146,9 +144,9 @@ export async function POST(request: NextRequest) {
 
       // ✅ FIX: Tạo notification cho user khi withdrawal được approve
       try {
-        const { createNotification } = await import('@/lib/database-mysql');
+        const { createNotification } = await import('@/lib/database');
         await createNotification({
-          userId: dbUserId as string | number,
+          userId: Number(dbUserId),
           type: 'withdrawal_approved',
           message: `Yêu cầu rút tiền ${amount.toLocaleString('vi-VN')}đ đã được duyệt. Tiền sẽ được chuyển vào tài khoản của bạn trong vòng 1-3 ngày làm việc. Số dư hiện tại: ${result.newBalance.toLocaleString('vi-VN')}đ`,
           isRead: false,
@@ -161,8 +159,8 @@ export async function POST(request: NextRequest) {
       // ✅ NEW: Gửi email thông báo rút tiền thành công cho khách hàng
       try {
         const recipientEmail = userEmail || (await (async () => {
-          const { getUserByIdMySQL } = await import('@/lib/database-mysql');
-          const user = await getUserByIdMySQL(dbUserId);
+          const { getUserById } = await import('@/lib/database');
+          const user = await getUserById(dbUserId);
           return user?.email;
         })());
         if (recipientEmail) {
@@ -189,11 +187,12 @@ export async function POST(request: NextRequest) {
 
       // ✅ FIX: Tạo notification cho user khi withdrawal bị reject
       try {
-        const { createNotification } = await import('@/lib/database-mysql');
+        const { createNotification } = await import('@/lib/database');
+        const rejectAmt = Number(amount) || Number(withdrawal.amount) || 0;
         await createNotification({
-          userId: dbUserIdForReject as string | number,
+          userId: Number(dbUserIdForReject),
           type: 'withdrawal_rejected',
-          message: `Yêu cầu rút tiền ${amount.toLocaleString('vi-VN')}đ đã bị từ chối. Vui lòng liên hệ admin để biết thêm chi tiết.`,
+          message: `Yêu cầu rút tiền ${rejectAmt.toLocaleString('vi-VN')}đ đã bị từ chối. Vui lòng liên hệ admin để biết thêm chi tiết.`,
           isRead: false,
         });
       } catch (notifError) {

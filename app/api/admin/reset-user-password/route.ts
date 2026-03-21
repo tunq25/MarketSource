@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, validateRequest } from "@/lib/api-auth";
-import { query } from "@/lib/database-mysql";
+import { query } from "@/lib/database";
 import bcrypt from "bcryptjs";
 
 export const runtime = "nodejs";
@@ -48,16 +48,15 @@ export async function POST(request: NextRequest) {
         // Cập nhật CSDL
         let normalizedId = parseInt(userId);
         if (isNaN(normalizedId)) {
-            // Trong trường hợp ID được Firebase render (chuỗi)
-            const { getUserIdByEmailMySQL } = await import('@/lib/database-mysql');
+            const { getUserIdByEmail } = await import('@/lib/database');
             if (body.userEmail) {
-                const mysqlId = await getUserIdByEmailMySQL(body.userEmail);
-                if (mysqlId) normalizedId = mysqlId;
+                const dbId = await getUserIdByEmail(body.userEmail);
+                if (dbId) normalizedId = dbId;
             }
         }
 
         await query(
-            "UPDATE users SET password_hash = ? WHERE id = ?",
+            "UPDATE users SET password_hash = $1 WHERE id = $2",
             [hashedPassword, normalizedId]
         );
 

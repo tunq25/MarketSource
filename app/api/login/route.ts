@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, createOrUpdateUser } from '@/lib/database-mysql';
+import { getUserByEmail, createOrUpdateUser } from '@/lib/database';
 import { getClientIP } from '@/lib/api-auth';
 import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
@@ -17,8 +17,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    let { email, password, captchaToken } = body;
+    let { email, password, captchaToken, rememberMe } = body;
     email = email?.trim().toLowerCase();
+    /** Ghi nhớ đăng nhập: cookie + JWT dài hơn (thiết bị vẫn đăng nhập sau khi đóng trình duyệt) */
+    const persistSession = Boolean(rememberMe);
+    const sessionMaxAgeSec = persistSession
+      ? 60 * 60 * 24 * 30 // 30 ngày
+      : 60 * 60 * 24; // 1 ngày (máy dùng chung / không ghi nhớ)
+    const jwtExpires = persistSession ? '30d' : '1d';
 
     // ✅ PoW Captcha verification
     const { verifyPoWCaptcha } = await import('@/lib/pow-captcha');
@@ -80,14 +86,14 @@ export async function POST(request: NextRequest) {
       throw new Error('Cấu hình hệ thống lỗi: Thiếu JWT_SECRET');
     }
     const secret = new TextEncoder().encode(jwtSecret);
-    const authToken = await new SignJWT({ 
-      userId: String(user.id), 
-      email: user.email, 
-      role: user.role || 'user' 
+    const authToken = await new SignJWT({
+      userId: String(user.id),
+      email: user.email,
+      role: user.role || 'user',
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime('7d')
+      .setExpirationTime(jwtExpires)
       .sign(secret);
 
     const response = NextResponse.json({
@@ -110,7 +116,7 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: sessionMaxAgeSec,
     });
 
     return response;

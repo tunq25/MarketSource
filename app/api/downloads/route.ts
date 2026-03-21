@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyFirebaseToken } from '@/lib/api-auth'
-import { getUserIdByEmail, query } from '@/lib/database-mysql'
+import { getUserIdByEmail, query } from '@/lib/database'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -44,10 +44,10 @@ export async function GET(request: NextRequest) {
         p.version,
         p.file_size AS size,
         p.download_url,
-        (SELECT COUNT(*) FROM downloads WHERE product_id = d.product_id AND user_id = ?) AS total_downloads
+        (SELECT COUNT(*) FROM downloads WHERE product_id = d.product_id AND user_id = $1) AS total_downloads
       FROM downloads d
       LEFT JOIN products p ON d.product_id = p.id
-      WHERE d.user_id = ?
+      WHERE d.user_id = $2
       ORDER BY d.downloaded_at DESC
       LIMIT 100
     `, [dbUserId, dbUserId])

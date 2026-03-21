@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { findValidPasswordResetToken, getUserByEmail } from "@/lib/database-mysql"
+import { findValidPasswordResetToken, getUserByEmail } from "@/lib/database"
 import { logger } from "@/lib/logger"
 
 export const runtime = "nodejs"

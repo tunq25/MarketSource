@@ -252,6 +252,75 @@ function getPoolInstance(): Pool | null {
   return poolInstance;
 }
 
+/**
+ * Executes a function within a database transaction.
+ * @param fn The function to execute. It receives a connected PoolClient.
+ */
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    logger.error('Transaction failed, rolled back', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Atomically updates user balance with validation.
+ */
+export async function updateBalance(
+  userId: number,
+  amount: number,
+  type: 'increase' | 'decrease',
+  client?: PoolClient
+): Promise<{ success: boolean; newBalance: number }> {
+  const poolOrClient = client || pool;
+  
+  try {
+    // Lock row if in transaction
+    const lockQuery = client ? ' FOR UPDATE' : '';
+    
+    // Get current balance
+    const userRes = await poolOrClient.query(
+      `SELECT balance FROM users WHERE id = $1${lockQuery}`,
+      [userId]
+    );
+    
+    if (userRes.rows.length === 0) {
+      throw new Error('User not found');
+    }
+    
+    const currentBalance = parseFloat(userRes.rows[0].balance || '0');
+    let newBalance = currentBalance;
+    
+    if (type === 'increase') {
+      newBalance += amount;
+    } else {
+      if (currentBalance < amount) {
+        throw new Error(`Insufficient balance. Current: ${currentBalance}, Required: ${amount}`);
+      }
+      newBalance -= amount;
+    }
+    
+    await poolOrClient.query(
+      'UPDATE users SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [newBalance, userId]
+    );
+    
+    return { success: true, newBalance };
+  } catch (error) {
+    logger.error('Error updating balance', error, { userId, amount, type });
+    throw error;
+  }
+}
+
 // Helper function để retry query với exponential backoff
 export async function queryWithRetry<T = any>(
   queryText: string,
@@ -295,6 +364,14 @@ export async function query<T = any>(sql: string, params: any[] = []): Promise<T
     logger.error('PostgreSQL query error', error, { sql: sql.substring(0, 100) });
     throw error;
   }
+}
+
+/**
+ * Executes a query and returns the first row.
+ */
+export async function queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
+  const rows = await query<T>(sql, params);
+  return rows[0] || null;
 }
 
 export const pool = new Proxy({} as Pool, {
@@ -713,14 +790,42 @@ export async function normalizeUserId(
   try {
     if (typeof firebaseUidOrEmail === 'number') return firebaseUidOrEmail;
 
-    const instance = getPool();
-    // 1. Tìm theo firebase_uid, username hoặc email
-    const result = await instance.query(
-      "SELECT id FROM users WHERE (firebase_uid = $1 OR username = $1 OR email = $1 OR email = $2) AND deleted_at IS NULL",
-      [firebaseUidOrEmail, userEmail || firebaseUidOrEmail]
+    // Ưu tiên tìm theo Firebase UID (nếu có), sau đó là Email, cuối cùng là Username
+    // Điều này tránh tranh chấp nếu một username trùng với một email của user khác
+    
+    // 1. External auth UID (Firebase / OAuth) — cột trong DB là `uid`, không phải `firebase_uid`
+    const resUid = await pool.query(
+      "SELECT id FROM users WHERE uid = $1 AND deleted_at IS NULL",
+      [String(firebaseUidOrEmail)]
     );
+    if (resUid.rows.length > 0) return Number(resUid.rows[0].id);
 
-    if (result.rows.length > 0) return Number(result.rows[0].id);
+    // 2. Email (search param hoặc userEmail)
+    const emailToSearch = (typeof firebaseUidOrEmail === 'string' && firebaseUidOrEmail.includes('@')) 
+      ? firebaseUidOrEmail 
+      : userEmail;
+      
+    if (emailToSearch) {
+      const resEmail = await pool.query("SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL", [emailToSearch]);
+      if (resEmail.rows.length > 0) return Number(resEmail.rows[0].id);
+    }
+
+    // 3. Username
+    const resUsername = await pool.query("SELECT id FROM users WHERE username = $1 AND deleted_at IS NULL", [firebaseUidOrEmail]);
+    if (resUsername.rows.length > 0) return Number(resUsername.rows[0].id);
+
+    // 4. Chuỗi chỉ gồm chữ số = khóa `users.id` (JWT login trả uid = String(id); đặt sau username để tránh nhầm username toàn số)
+    const digitsOnly = String(firebaseUidOrEmail).trim();
+    if (/^\d+$/.test(digitsOnly)) {
+      const nid = parseInt(digitsOnly, 10);
+      if (Number.isFinite(nid) && nid > 0) {
+        const resByPk = await pool.query(
+          "SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL",
+          [nid]
+        );
+        if (resByPk.rows.length > 0) return Number(resByPk.rows[0].id);
+      }
+    }
 
     logger.warn('normalizeUserId: Failed to resolve database ID', { firebaseUidOrEmail, userEmail });
     return null;
@@ -1065,45 +1170,44 @@ export async function createWithdrawal(withdrawalData: {
   accountName: string;
   userEmail?: string;
 }) {
-  const client: PoolClient = await pool.connect();
-  try {
+  return await withTransaction(async (client) => {
     const dbUserId = await normalizeUserId(withdrawalData.userId, withdrawalData.userEmail);
-
     if (!dbUserId) {
       throw new Error('Cannot resolve user ID.');
     }
 
-    await client.query('BEGIN');
-
-    // ✅ FIX: Lock user row để tránh race condition khi check balance
-    const userResult = await client.query(
+    // 1. Lock user row và check balance
+    const userRes = await client.query(
       'SELECT balance FROM users WHERE id = $1 FOR UPDATE',
       [dbUserId]
     );
 
-    if (userResult.rows.length === 0) {
+    if (userRes.rows.length === 0) {
       throw new Error('User not found');
     }
 
-    const currentBalance = parseFloat(userResult.rows[0].balance || '0');
-
+    const currentBalance = parseFloat(userRes.rows[0].balance || '0');
     if (currentBalance < withdrawalData.amount) {
-      await client.query('ROLLBACK');
       throw new Error('Insufficient balance');
     }
 
-    // ✅ FIX: Check có withdrawal pending nào không (optional - tùy business logic)
+    // 2. Check pending withdrawal
     const pendingWithdrawals = await client.query(
       'SELECT id FROM withdrawals WHERE user_id = $1 AND status = $2',
       [dbUserId, 'pending']
     );
 
     if (pendingWithdrawals.rows.length > 0) {
-      await client.query('ROLLBACK');
       throw new Error('You have a pending withdrawal request. Please wait for approval.');
     }
 
-    // Insert withdrawal trong cùng transaction (Sử dụng RETURNING id cho PostgreSQL)
+    // 3. Trừ tiền user_balance ngay lập tức atomically
+    await client.query(
+      'UPDATE users SET balance = balance - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND balance >= $1',
+      [withdrawalData.amount, dbUserId]
+    );
+
+    // 4. Tạo bản ghi rút tiền
     const result = await client.query(
       `INSERT INTO withdrawals (user_id, amount, bank_name, account_number, account_name, user_email, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'pending')
@@ -1118,24 +1222,11 @@ export async function createWithdrawal(withdrawalData: {
       ]
     );
 
-    const withdrawalId = result.rows[0].id;
-
-    await client.query('COMMIT');
-
     return {
       id: result.rows[0].id,
       createdAt: result.rows[0].created_at,
     };
-  } catch (error) {
-    await client.query('ROLLBACK');
-    logger.error('Error creating withdrawal', error, {
-      userId: withdrawalData.userId,
-      amount: withdrawalData.amount
-    });
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function updateWithdrawalStatus(
@@ -1143,34 +1234,65 @@ export async function updateWithdrawalStatus(
   status: 'pending' | 'approved' | 'rejected',
   approvedBy?: string
 ) {
-  try {
-    // ✅ FIX: Whitelist updates để tránh SQL injection
-    const updates: string[] = [];
-    const params: any[] = [withdrawalId];
-    let paramIndex = 2;
+  return await withTransaction(async (client) => {
+    // 1. Lock withdrawal row
+    const withdrawalRows = await client.query(
+      'SELECT user_id, amount, status FROM withdrawals WHERE id = $1 FOR UPDATE',
+      [withdrawalId]
+    );
 
-    // Status is always required
-    updates.push(`status = $${paramIndex}`);
-    params.push(status);
-    paramIndex++;
-
-    if (status === 'approved' && approvedBy) {
-      updates.push(`approved_time = CURRENT_TIMESTAMP`);
-      updates.push(`approved_by = $${paramIndex}`);
-      params.push(approvedBy);
-      paramIndex++;
+    if (withdrawalRows.rows.length === 0) {
+      throw new Error('Withdrawal not found');
     }
 
-    if (updates.length > 0) {
-      await pool.query(
-        `UPDATE withdrawals SET ${updates.join(', ')} WHERE id = $1`,
-        params
+    const withdrawal = withdrawalRows.rows[0];
+
+    // No change needed if status is the same
+    if (withdrawal.status === status) return;
+
+    // 2. Handle Refund: Pending -> Rejected
+    if (withdrawal.status === 'pending' && status === 'rejected') {
+      await client.query(
+        'UPDATE users SET balance = balance + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [withdrawal.amount, withdrawal.user_id]
       );
     }
-  } catch (error) {
-    logger.error('Error updating withdrawal status', error, { withdrawalId, status });
-    throw error;
-  }
+
+    // 3. Handle Re-deduction: Rejected -> Pending/Approved
+    if (withdrawal.status === 'rejected' && (status === 'pending' || status === 'approved')) {
+      const userResult = await client.query(
+        'SELECT balance FROM users WHERE id = $1 FOR UPDATE',
+        [withdrawal.user_id]
+      );
+      const currentBalance = parseFloat(userResult.rows[0]?.balance || '0');
+      
+      if (currentBalance < parseFloat(withdrawal.amount)) {
+        throw new Error('User does not have enough balance to re-approve this withdrawal');
+      }
+
+      await client.query(
+        'UPDATE users SET balance = balance - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [withdrawal.amount, withdrawal.user_id]
+      );
+    }
+
+    // 4. Update status
+    const updates: string[] = [];
+    const params: any[] = [status, withdrawalId];
+    
+    updates.push('status = $1');
+    
+    if (status === 'approved' && approvedBy) {
+      updates.push('approved_time = CURRENT_TIMESTAMP');
+      updates.push(`approved_by = $${params.length + 1}`);
+      params.push(approvedBy);
+    }
+
+    await client.query(
+      `UPDATE withdrawals SET ${updates.join(', ')} WHERE id = $2`,
+      params
+    );
+  });
 }
 
 /**
@@ -1182,11 +1304,8 @@ export async function approveWithdrawalAndUpdateBalance(
   amount: number,
   approvedBy: string
 ) {
-  const client: PoolClient = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // ✅ FIX: Lock withdrawal row và check status để tránh double approval
+  return await withTransaction(async (client) => {
+    // 1. Lock withdrawal row
     const withdrawalResult = await client.query(
       'SELECT id, user_id, amount, status FROM withdrawals WHERE id = $1 FOR UPDATE',
       [withdrawalId]
@@ -1198,7 +1317,6 @@ export async function approveWithdrawalAndUpdateBalance(
 
     const withdrawal = withdrawalResult.rows[0];
 
-    // ✅ FIX: Check withdrawal đã được approve chưa
     if (withdrawal.status === 'approved') {
       throw new Error('Withdrawal has already been approved');
     }
@@ -1207,17 +1325,15 @@ export async function approveWithdrawalAndUpdateBalance(
       throw new Error('Withdrawal has been rejected and cannot be approved');
     }
 
-    // ✅ FIX: Validate userId và amount match với withdrawal
-    if (withdrawal.user_id !== userId) {
+    if (Number(withdrawal.user_id) !== Number(userId)) {
       throw new Error('User ID mismatch with withdrawal');
     }
 
-    // ✅ FIX: So sánh amount với epsilon cho PostgreSQL decimal
     if (Math.abs(parseFloat(withdrawal.amount) - Number(amount)) > 0.01) {
       throw new Error('Amount mismatch with withdrawal');
     }
 
-    // Lock user row
+    // 2. Lock user row (đã trừ tiền khi create, nên ở đây chỉ verify số dư >= 0 nếu cần)
     const userResult = await client.query(
       'SELECT balance FROM users WHERE id = $1 FOR UPDATE',
       [userId]
@@ -1229,13 +1345,7 @@ export async function approveWithdrawalAndUpdateBalance(
 
     const currentBalance = parseFloat(userResult.rows[0].balance || '0');
 
-    if (currentBalance < amount) {
-      throw new Error('Insufficient balance');
-    }
-
-    const newBalance = currentBalance - amount;
-
-    // Update withdrawal status
+    // 3. Update withdrawal status
     await client.query(
       `UPDATE withdrawals 
        SET status = 'approved', 
@@ -1245,25 +1355,11 @@ export async function approveWithdrawalAndUpdateBalance(
       [approvedBy, withdrawalId]
     );
 
-    // Update user balance
-    await client.query(
-      'UPDATE users SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [newBalance, userId]
-    );
-
-    await client.query('COMMIT');
-
     return {
       success: true,
-      newBalance,
+      newBalance: currentBalance,
     };
-  } catch (error) {
-    await client.query('ROLLBACK');
-    logger.error('Error approving withdrawal', error, { withdrawalId, userId, amount });
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 // ============================================================
@@ -1301,96 +1397,203 @@ export async function createPurchase(purchaseData: {
   amount: number;
   userEmail?: string;
 }) {
-  const client: PoolClient = await pool.connect();
-  try {
+  return await withTransaction(async (client) => {
     const dbUserId = await normalizeUserId(purchaseData.userId, purchaseData.userEmail);
-    const productIdNum = typeof purchaseData.productId === 'number'
-      ? purchaseData.productId
-      : parseInt(purchaseData.productId.toString(), 10);
-
     if (!dbUserId) {
       throw new Error('Cannot resolve user ID.');
     }
 
-    await client.query('BEGIN');
+    const productIdNum = typeof purchaseData.productId === 'number'
+      ? purchaseData.productId
+      : parseInt(purchaseData.productId.toString(), 10);
 
-    // 1. Lock user row để tránh race condition tài chính và mua trùng
-    const userResult = await client.query(
+    // 1. Lock user row và check balance
+    const userRes = await client.query(
       'SELECT balance FROM users WHERE id = $1 FOR UPDATE',
       [dbUserId]
     );
 
-    if (userResult.rows.length === 0) {
+    if (userRes.rows.length === 0) {
       throw new Error('User not found');
     }
 
-    const currentBalance = parseFloat(userResult.rows[0].balance || '0');
+    const currentBalance = parseFloat(userRes.rows[0].balance || '0');
 
-    // 2. Check xem đã mua sản phẩm này chưa (Tránh race condition mua trùng)
-    const existingPurchase = await client.query(
+    // 2. Check duplicate purchase
+    const existingRes = await client.query(
       'SELECT id FROM purchases WHERE user_id = $1 AND product_id = $2',
       [dbUserId, productIdNum]
     );
 
-    if (existingPurchase.rows.length > 0) {
+    if (existingRes.rows.length > 0) {
       throw new Error('Bạn đã mua sản phẩm này rồi');
     }
 
-    // 3. Lấy thông tin sản phẩm
-    const productResult = await client.query(
-      'SELECT id, price, is_active FROM products WHERE id = $1 AND deleted_at IS NULL',
+    // 3. Get product and check availability
+    const productRes = await client.query(
+      'SELECT id, price, is_active FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
       [productIdNum]
     );
 
-    if (productResult.rows.length === 0) {
+    if (productRes.rows.length === 0) {
       throw new Error('Sản phẩm không tồn tại hoặc đã bị xóa');
     }
 
-    const product = productResult.rows[0];
-
+    const product = productRes.rows[0];
     if (!product.is_active) {
       throw new Error('Sản phẩm hiện không còn khả dụng');
     }
 
     const price = parseFloat(product.price);
-    const finalPurchasePrice = price; // Mặc định mua 1 bản
 
-    // 4. Kiểm tra số dư
-    if (currentBalance < finalPurchasePrice) {
-      throw new Error(`Số dư không đủ. Cần ${finalPurchasePrice.toLocaleString('vi-VN')}đ, hiện có ${currentBalance.toLocaleString('vi-VN')}đ`);
+    // 4. Validate balance
+    if (currentBalance < price) {
+      throw new Error(`Số dư không đủ. Cần ${price.toLocaleString('vi-VN')}đ, hiện có ${currentBalance.toLocaleString('vi-VN')}đ`);
     }
 
-    const newBalance = currentBalance - finalPurchasePrice;
-
-    // 5. Tạo bản ghi mua hàng
-    const purchaseResult = await client.query(
-      'INSERT INTO purchases (user_id, product_id, amount) VALUES ($1, $2, $3) RETURNING id',
-      [dbUserId, productIdNum, finalPurchasePrice]
-    );
-
-    // 6. Cập nhật số dư atomically
+    // 5. Atomic balance update
     await client.query(
       'UPDATE users SET balance = balance - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND balance >= $1',
-      [finalPurchasePrice, dbUserId]
+      [price, dbUserId]
     );
 
-    await client.query('COMMIT');
+    // 6. Create purchase record
+    const result = await client.query(
+      'INSERT INTO purchases (user_id, product_id, amount) VALUES ($1, $2, $3) RETURNING id',
+      [dbUserId, productIdNum, price]
+    );
 
     return {
-      id: Number(purchaseResult.rows[0].id),
-      newBalance: newBalance,
+      id: Number(result.rows[0].id),
+      newBalance: currentBalance - price,
+      amount: price,
     };
-  } catch (error) {
-    await client.query('ROLLBACK');
-    logger.error('Error creating purchase', error, {
-      userId: purchaseData.userId,
-      productId: purchaseData.productId,
-      amount: purchaseData.amount
-    });
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
+}
+
+/**
+ * Hoa hồng giới thiệu: mỗi giao dịch mua, cộng % lên số dư người giới thiệu (theo bảng referrals).
+ */
+export async function processReferralCommission(
+  referredUserId: number,
+  purchaseAmount: number
+): Promise<{ referrerId: number; commissionAmount: number } | null> {
+  if (!purchaseAmount || purchaseAmount <= 0) return null;
+
+  return await withTransaction(async (client) => {
+    const refRes = await client.query(
+      `SELECT id, referrer_id, commission_percent, status
+       FROM referrals
+       WHERE referred_id = $1
+       FOR UPDATE`,
+      [referredUserId]
+    );
+    if (refRes.rows.length === 0) return null;
+
+    const ref = refRes.rows[0];
+    const pct = parseFloat(String(ref.commission_percent ?? 10));
+    const commission = Math.round(purchaseAmount * (pct / 100) * 100) / 100;
+    if (commission <= 0) return null;
+
+    await client.query(
+      `UPDATE users SET balance = balance + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [commission, ref.referrer_id]
+    );
+
+    await client.query(
+      `UPDATE referrals SET
+         total_earnings = COALESCE(total_earnings, 0) + $1::numeric,
+         status = CASE WHEN status = 'pending' THEN 'active' ELSE status END,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [commission, ref.id]
+    );
+
+    return { referrerId: Number(ref.referrer_id), commissionAmount: commission };
+  });
+}
+
+/**
+ * Bulk purchase items atomically.
+ */
+export async function createBulkPurchase(purchaseData: {
+  userId: string | number;
+  items: { id: string | number; quantity: number }[];
+  userEmail?: string;
+}) {
+  return await withTransaction(async (client) => {
+    const dbUserId = await normalizeUserId(purchaseData.userId, purchaseData.userEmail);
+    if (!dbUserId) {
+      throw new Error('Cannot resolve user ID.');
+    }
+
+    // 1. Lock user row
+    const userRes = await client.query(
+      'SELECT balance FROM users WHERE id = $1 FOR UPDATE',
+      [dbUserId]
+    );
+    const currentBalance = parseFloat(userRes.rows[0]?.balance || '0');
+
+    let totalAmount = 0;
+    const validatedItems = [];
+
+    // 2. Validate all products and calculate total
+    for (const item of purchaseData.items) {
+      const productIdNum = typeof item.id === 'number' ? item.id : parseInt(String(item.id), 10);
+
+      const productRes = await client.query(
+        'SELECT id, price, is_active, title FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
+        [productIdNum]
+      );
+      
+      const product = productRes.rows[0];
+      if (!product) throw new Error(`Sản phẩm #${item.id} không tồn tại hoặc đã bị xóa`);
+      if (!product.is_active) throw new Error(`Sản phẩm "${product.title}" hiện không khả dụng`);
+
+      // Check duplicate
+      const existingRes = await client.query(
+        'SELECT id FROM purchases WHERE user_id = $1 AND product_id = $2',
+        [dbUserId, productIdNum]
+      );
+      if (existingRes.rows.length > 0) {
+        throw new Error(`Bạn đã mua sản phẩm "${product.title}" rồi`);
+      }
+
+      const price = parseFloat(product.price);
+      const quantity = Math.max(1, item.quantity);
+      const amount = price * quantity;
+
+      totalAmount += amount;
+      validatedItems.push({ id: productIdNum, amount });
+    }
+
+    // 3. Final balance check
+    if (currentBalance < totalAmount) {
+      throw new Error(`Số dư không đủ. Cần ${totalAmount.toLocaleString('vi-VN')}đ, hiện có ${currentBalance.toLocaleString('vi-VN')}đ`);
+    }
+
+    // 4. Update balance
+    await client.query(
+      'UPDATE users SET balance = balance - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND balance >= $1',
+      [totalAmount, dbUserId]
+    );
+
+    // 5. Create all purchase records
+    const purchaseIds = [];
+    for (const item of validatedItems) {
+      const pRes = await client.query(
+        'INSERT INTO purchases (user_id, product_id, amount) VALUES ($1, $2, $3) RETURNING id',
+        [dbUserId, item.id, item.amount]
+      );
+      purchaseIds.push(Number(pRes.rows[0].id));
+    }
+
+    return {
+      success: true,
+      newBalance: currentBalance - totalAmount,
+      purchaseIds
+    };
+  });
 }
 
 // ============================================================
@@ -2162,9 +2365,12 @@ export async function createReview(reviewData: {
 export async function getWishlist(userId: number) {
   try {
     const result = await pool.query(
-      `SELECT w.*, p.title, p.price, p.image_url, p.category
+      `SELECT w.*, p.*, 
+              COALESCE(pr.average_rating, 0) as avg_rating,
+              COALESCE(pr.total_ratings, 0) as review_count
        FROM wishlists w
        JOIN products p ON w.product_id = p.id
+       LEFT JOIN product_ratings pr ON p.id = pr.product_id
        WHERE w.user_id = $1
        ORDER BY w.created_at DESC`,
       [userId]
@@ -2215,6 +2421,82 @@ export async function isInWishlist(userId: number, productId: number): Promise<b
   } catch (error) {
     logger.error("Error checking wishlist status", error, { userId, productId });
     return false;
+  }
+}
+
+// ============================================================
+// PRODUCT SEARCH (Full-Text Search)
+// ============================================================
+
+export async function searchProducts(query: string, filters?: {
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minRating?: number;
+  limit?: number;
+  offset?: number;
+}) {
+  try {
+    // PostgreSQL Full-Text Search using websearch_to_tsquery for better UX
+    let sql = `
+      SELECT p.*,
+             pr.average_rating as avg_rating,
+             pr.total_ratings as review_count,
+             ts_rank(to_tsvector('english', p.title || ' ' || COALESCE(p.description, '')), websearch_to_tsquery('english', $1)) as rank
+      FROM products p
+      LEFT JOIN product_ratings pr ON p.id = pr.product_id
+      WHERE p.deleted_at IS NULL AND p.is_active = TRUE
+        AND (
+          to_tsvector('english', p.title || ' ' || COALESCE(p.description, '')) @@ websearch_to_tsquery('english', $1)
+          OR p.title ILIKE $2
+          OR p.tags::text ILIKE $2
+        )
+    `;
+    const params: any[] = [query, `%${query}%`];
+    let paramIndex = 3;
+
+    if (filters?.category) {
+      sql += ` AND p.category = $${paramIndex}`;
+      params.push(filters.category);
+      paramIndex++;
+    }
+
+    if (filters?.minPrice !== undefined) {
+      sql += ` AND p.price >= $${paramIndex}`;
+      params.push(filters.minPrice);
+      paramIndex++;
+    }
+
+    if (filters?.maxPrice !== undefined) {
+      sql += ` AND p.price <= $${paramIndex}`;
+      params.push(filters.maxPrice);
+      paramIndex++;
+    }
+
+    if (filters?.minRating !== undefined) {
+      sql += ` AND (pr.average_rating >= $${paramIndex} OR pr.average_rating IS NULL)`;
+      params.push(filters.minRating);
+      paramIndex++;
+    }
+
+    sql += ` ORDER BY rank DESC, p.created_at DESC`;
+
+    if (filters?.limit) {
+      sql += ` LIMIT $${paramIndex}`;
+      params.push(filters.limit);
+      paramIndex++;
+    }
+
+    if (filters?.offset) {
+      sql += ` OFFSET $${paramIndex}`;
+      params.push(filters.offset);
+    }
+
+    const result = await pool.query(sql, params);
+    return result.rows;
+  } catch (error) {
+    logger.error('Error searching products (Postgres)', error, { query, filters });
+    throw error;
   }
 }
 
@@ -2490,11 +2772,24 @@ export async function getProductViewCount(productId: number): Promise<number> {
 // BUNDLE FUNCTIONS
 // ============================================================
 
-export async function getBundles() {
+export async function getBundles(isActive?: boolean) {
   try {
-    const result = await pool.query(
-      "SELECT * FROM bundles WHERE is_active = TRUE ORDER BY created_at DESC"
-    );
+    let query = `
+      SELECT b.*,
+             COUNT(bp.product_id) as product_count
+      FROM bundles b
+      LEFT JOIN bundle_products bp ON b.id = bp.bundle_id
+    `;
+    const params: any[] = [];
+
+    if (isActive !== undefined) {
+      query += ' WHERE b.is_active = $1';
+      params.push(isActive);
+    }
+
+    query += ' GROUP BY b.id ORDER BY b.created_at DESC';
+
+    const result = await pool.query(query, params);
     return result.rows;
   } catch (error) {
     logger.error("Error getting bundles", error);
@@ -2513,6 +2808,66 @@ export async function getBundleById(bundleId: number) {
     logger.error("Error getting bundle by ID", error, { bundleId });
     throw error;
   }
+}
+
+export async function getBundleWithProducts(bundleId: number) {
+  try {
+    const bundleRes = await pool.query(
+      'SELECT * FROM bundles WHERE id = $1',
+      [bundleId]
+    );
+
+    if (bundleRes.rows.length === 0) return null;
+
+    const productRes = await pool.query(
+      `SELECT p.*
+       FROM products p
+       JOIN bundle_products bp ON p.id = bp.product_id
+       WHERE bp.bundle_id = $1 AND p.deleted_at IS NULL`,
+      [bundleId]
+    );
+
+    return {
+      ...bundleRes.rows[0],
+      products: productRes.rows,
+    };
+  } catch (error) {
+    logger.error('Error getting bundle with products', error, { bundleId });
+    throw error;
+  }
+}
+
+// ============================================================
+// REVIEW VOTES FUNCTIONS
+// ============================================================
+
+export async function voteReview(reviewId: number, userId: number, isHelpful: boolean) {
+  return await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO review_votes (review_id, user_id, is_helpful)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (review_id, user_id) 
+       DO UPDATE SET is_helpful = EXCLUDED.is_helpful, updated_at = CURRENT_TIMESTAMP`,
+      [reviewId, userId, isHelpful]
+    );
+
+    // Sync helpful_count to reviews table
+    await client.query(
+      `UPDATE reviews 
+       SET helpful_count = (
+         SELECT COUNT(*) FROM review_votes 
+         WHERE review_id = $1 AND is_helpful = true
+       )
+       WHERE id = $1`,
+      [reviewId]
+    );
+
+    const checkRes = await client.query(
+      'SELECT id FROM review_votes WHERE review_id = $1 AND user_id = $2',
+      [reviewId, userId]
+    );
+    return checkRes.rows[0] || null;
+  });
 }
 
 // ============================================================
@@ -2586,5 +2941,76 @@ export async function getAdminActions(limit: number = 50) {
   } catch (error) {
     logger.error("Error getting admin actions", error);
     throw error;
+  }
+}
+
+// ============================================================
+// NOTIFICATION FUNCTIONS
+// ============================================================
+
+export async function createNotification(data: {
+  userId: number;
+  type: string;
+  message: string;
+  isRead?: boolean;
+}) {
+  try {
+    const result = await pool.query(
+      `INSERT INTO notifications (user_id, type, message, is_read, created_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [data.userId, data.type, data.message, data.isRead ?? false]
+    );
+    return result.rows[0];
+  } catch (error) {
+    logger.error("Error creating notification", error, data);
+    throw error;
+  }
+}
+
+export async function getNotifications(userId: number, limit: number = 20) {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM notifications 
+       WHERE user_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows;
+  } catch (error) {
+    logger.error("Error getting notifications", error, { userId });
+    throw error;
+  }
+}
+
+// ============================================================
+// SUBSCRIPTION FUNCTIONS
+// ============================================================
+
+export async function getUserSubscription(userId: number) {
+  try {
+    const result = await pool.query(
+      `SELECT s.*, sb.*
+       FROM subscriptions s
+       LEFT JOIN subscription_benefits sb ON s.plan = sb.plan
+       WHERE s.user_id = $1 AND s.status = 'active'
+       ORDER BY s.start_date DESC
+       LIMIT 1`,
+      [userId]
+    );
+    return result.rows[0] || null;
+  } catch (error) {
+    logger.error('Error getting user subscription', error, { userId });
+    throw error;
+  }
+}
+
+export async function getSubscriptionDiscount(userId: number): Promise<number> {
+  try {
+    const sub = await getUserSubscription(userId);
+    return sub ? parseFloat(sub.discount_percent || '0') : 0;
+  } catch (error) {
+    return 0;
   }
 }

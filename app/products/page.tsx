@@ -63,6 +63,23 @@ const ThemeAwareBackground = dynamic(
   }
 )
 
+/** Ảnh thẻ sản phẩm: fallback khi URL lỗi; parent phải có kích thước khi dùng fill */
+function ProductListImage({ src, title }: { src: string; title: string }) {
+  const [failed, setFailed] = useState(false)
+  const imgSrc = failed || !src ? "/placeholder.svg" : src
+  return (
+    <NextImage
+      src={imgSrc}
+      alt={title || "Product"}
+      fill
+      unoptimized
+      sizes="(max-width: 1024px) 100vw, 33vw"
+      className="object-cover group-hover:scale-110 transition-transform duration-500"
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
 const BASE_CATEGORIES = [
   { id: "all", name: "Tất cả", count: 0 },
   { id: "website", name: "Website", count: 0 },
@@ -399,16 +416,10 @@ export default function ProductsPage() {
                 style={{ animationDelay: `${index * 50}ms` }}
                 onClick={() => router.push(`/product/${product.id}`)}
               >
-                <div className="relative overflow-hidden">
-                  {/* ✅ FIX: Dùng img native thay next/image để tránh Next.js optimizer block external CDN */}
-                  <NextImage
-                    src={product.image || "/placeholder.svg"}
-                    alt={product.title || 'Product'}
-                    fill
-                    unoptimized
-                    sizes="(max-width: 1024px) 100vw, 33vw"
-                    className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500"
-                    onError={(e) => { e.currentTarget.src = "/placeholder.svg" }}
+                <div className="relative aspect-video w-full overflow-hidden">
+                  <ProductListImage
+                    src={product.image || product.imageUrl || ""}
+                    title={product.title || "Product"}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   {product.featured && (

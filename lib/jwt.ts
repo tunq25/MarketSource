@@ -4,9 +4,9 @@ let cachedSecret: Uint8Array | null = null;
 let cachedSecretKey: string | null = null;
 
 function getSecret(): Uint8Array {
-  const secretKey = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret';
+  const secretKey = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET;
 
-  if (!secretKey || secretKey === 'default-secret-key-change-in-production') {
+  if (!secretKey) {
     throw new Error(
       'JWT_SECRET or NEXTAUTH_SECRET must be set in environment variables.'
     );

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifyFirebaseToken } from "@/lib/api-auth"
-import { disableUserTwoFactor, getUserByEmail } from "@/lib/database-mysql"
+import { disableUserTwoFactor, getUserByEmail } from "@/lib/database"
 import { logger } from "@/lib/logger"
 
 export const runtime = 'nodejs'

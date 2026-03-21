@@ -1,5 +1,5 @@
 import { revalidateTag } from "next/cache"
-import { query } from "@/lib/database-mysql"
+import { query, normalizeUserId } from "@/lib/database"
 
 type PurchaseRow = {
   id: string
@@ -11,16 +11,23 @@ type PurchaseRow = {
   created_at: string
 }
 
-export async function getUserPurchases(uid: string, limit = 50): Promise<PurchaseRow[]> {
+export async function getUserPurchases(
+  uid: string,
+  limit = 50,
+  email?: string | null
+): Promise<PurchaseRow[]> {
   if (!uid) return []
+
+  const dbUserId = await normalizeUserId(uid, email || undefined)
+  if (!dbUserId) return []
 
   const rows = await query<PurchaseRow>(
     `SELECT id, user_id as user_uid, product_id, product_title, amount, status, created_at
      FROM purchases
-     WHERE user_id = ?
+     WHERE user_id = $1
      ORDER BY created_at DESC
-     LIMIT ?`,
-    [uid, limit],
+     LIMIT $2`,
+    [dbUserId, limit],
   )
 
   return rows.map(row => ({

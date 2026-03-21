@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getProducts, getProductById } from '@/lib/database-mysql'
+import { getProducts, getProductById, createProduct } from '@/lib/database'
 import { requireAdmin, validateRequest } from '@/lib/api-auth'
 import { checkRateLimitAndRespond } from '@/lib/rate-limit'
 import { productSchema } from '@/lib/validation-schemas'
 import { logError, createErrorResponse } from '@/lib/error-handler'
-import { query } from '@/lib/database-mysql'
 
 export const runtime = 'nodejs'
 
 /**
  * GET /api/products
- * Lấy danh sách products từ database
  */
 export async function GET(request: NextRequest) {
   try {
-    // Rate limiting
     const rateLimitResponse = await checkRateLimitAndRespond(request, 30, 10, 'products-get');
     if (rateLimitResponse) {
       return rateLimitResponse;
@@ -40,8 +37,6 @@ export async function GET(request: NextRequest) {
     if (isActive !== null && isActive !== undefined) {
       filters.isActive = isActive === 'true';
     } else {
-      // ✅ SECURITY FIX: Mặc định chỉ trả sản phẩm active cho public requests
-      // Admin muốn xem draft phải gửi isActive=false
       filters.isActive = true;
     }
 
@@ -80,7 +75,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/products
- * Tạo product mới (admin only) — ✅ FIX: MySQL syntax thay vì PostgreSQL
+ * Admin only
  */
 export async function POST(request: NextRequest) {
   try {
@@ -102,41 +97,19 @@ export async function POST(request: NextRequest) {
 
     const productData = validation.data
 
-    // ✅ FIX: Dùng MySQL syntax (? placeholder) thay vì PostgreSQL ($1,$2)
-    const sql = `
-      INSERT INTO products (
-        title, description, detailed_description, price, category, demo_url, download_url, image_url, image_urls, tags, is_active, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    `;
+    const result = await createProduct({
+      title: productData.title,
+      description: productData.description || undefined,
+      price: productData.price,
+      category: productData.category || undefined,
+      demoUrl: productData.demoUrl || undefined,
+      downloadUrl: productData.downloadUrl || undefined,
+      imageUrl: productData.imageUrl || undefined,
+      tags: productData.tags || undefined,
+      isActive: productData.isActive,
+    });
 
-    // ✅ FIX: tags phải là array cho PostgreSQL hoặc JSON string cho MySQL
-    const isPostgres = process.env.DATABASE_URL || !process.env.MYSQL_HOST;
-    const tagsValue = isPostgres
-      ? (Array.isArray(productData.tags) ? productData.tags : JSON.parse(productData.tags || '[]'))
-      : (Array.isArray(productData.tags) ? JSON.stringify(productData.tags) : productData.tags || '[]');
-
-    // Đối với image_urls, cột được tạo dưới dạng TEXT cho cả 2 db nên ta luôn stringify
-    const imageUrlsValue = Array.isArray(productData.imageUrls)
-      ? JSON.stringify(productData.imageUrls)
-      : '[]';
-
-    const res = await query(sql, [
-      productData.title,
-      productData.description || null,
-      productData.detailedDescription || null,
-      productData.price,
-      productData.category || null,
-      productData.demoUrl || null,
-      productData.downloadUrl || null,
-      productData.imageUrl || null,
-      imageUrlsValue,
-      tagsValue,
-      productData.isActive !== false,
-    ]);
-
-    // ✅ FIX: MySQL trả về insertId thay vì RETURNING
-    const newId = (res as any).insertId;
-    const product = newId ? await getProductById(newId) : null;
+    const product = result?.id ? await getProductById(result.id) : null;
 
     return NextResponse.json({
       success: true,
@@ -151,5 +124,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-

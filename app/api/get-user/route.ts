@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, getUserIdByEmail } from '@/lib/database-mysql';
+import { getUserByEmail, getUserIdByEmail } from '@/lib/database';
 import { requireAuth, verifyFirebaseToken } from '@/lib/api-auth';
 import { logger } from '@/lib/logger';
 
@@ -42,11 +42,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (authUser && !isAdmin && authUser.uid !== uid && authUser.email !== uid) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Can only access your own data' },
-        { status: 403 }
-      );
+    if (authUser && !isAdmin) {
+      const uidStr = String(uid);
+      const uidAsNum = parseInt(uidStr, 10);
+      const authDbId = authUser.email ? await getUserIdByEmail(authUser.email) : null;
+      const sameNumericId =
+        !Number.isNaN(uidAsNum) && authDbId !== null && authDbId === uidAsNum;
+      const sameProviderUid = authUser.uid === uidStr;
+      const sameEmail =
+        !!authUser.email && authUser.email.toLowerCase() === uidStr.toLowerCase();
+      if (!sameNumericId && !sameProviderUid && !sameEmail) {
+        return NextResponse.json(
+          { error: 'Unauthorized: Can only access your own data' },
+          { status: 403 }
+        );
+      }
     }
 
     // Fallback to PostgreSQL
@@ -61,14 +71,14 @@ export async function GET(request: NextRequest) {
       const numericPart = uid.replace('email_', '');
       const userIdNum = parseInt(numericPart);
       if (!isNaN(userIdNum)) {
-        const { getUserById } = await import('@/lib/database-mysql');
+        const { getUserById } = await import('@/lib/database');
         result = await getUserById(userIdNum);
       }
     } else {
       // Try as numeric ID
       const userIdNum = parseInt(uid);
       if (!isNaN(userIdNum)) {
-        const { getUserById } = await import('@/lib/database-mysql');
+        const { getUserById } = await import('@/lib/database');
         result = await getUserById(userIdNum);
       } else {
         // ✅ BUG #8 FIX: Firebase UID thuần (string dài) - thử tìm qua email nếu authUser đã biết email

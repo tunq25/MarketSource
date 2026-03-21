@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { searchProducts } from '@/lib/database-enhancements';
+import { searchProducts } from '@/lib/database';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 

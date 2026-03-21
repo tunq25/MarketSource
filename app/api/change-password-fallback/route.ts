@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ FIX: Tìm user trong database và verify mật khẩu hiện tại
-    const { getUserByEmail, updateUserPasswordHash } = await import('@/lib/database-mysql')
+    const { getUserByEmail, updateUserPasswordHash } = await import('@/lib/database')
     const user = await getUserByEmail(email)
 
     if (!user) {

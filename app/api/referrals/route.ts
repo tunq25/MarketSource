@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseToken } from '@/lib/api-auth';
-import { getUserIdByEmail, query, queryOne } from '@/lib/database-mysql';
+import { getUserIdByEmail, query, queryOne } from '@/lib/database';
 import { checkRateLimitAndRespond } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
           u.created_at as referred_joined_at
         FROM referrals r
         LEFT JOIN users u ON r.referred_id = u.id
-        WHERE r.referrer_id = ?
+        WHERE r.referrer_id = $1
         ORDER BY r.created_at DESC
       `, [userId]);
 
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       const user = await queryOne<any>(`
         SELECT id, uid, email, referral_code 
         FROM users 
-        WHERE id = ?
+        WHERE id = $1
       `, [userId]);
 
       const referralCode = user?.referral_code || user?.uid || String(userId);
@@ -106,13 +106,13 @@ export async function GET(request: NextRequest) {
       });
     } catch (error: any) {
       // Nếu table referrals không tồn tại, trả về empty data
-      if (error.message?.includes("doesn't exist") || error.message?.includes("Unknown table")) {
+      if (error.message?.includes("does not exist") || error.message?.includes("relation")) {
         logger.warn('Referrals table does not exist, returning empty data');
         
         const user = await queryOne<any>(`
           SELECT id, uid, email, referral_code 
           FROM users 
-          WHERE id = ?
+          WHERE id = $1
         `, [userId]);
 
         const referralCode = user?.referral_code || user?.uid || String(userId);

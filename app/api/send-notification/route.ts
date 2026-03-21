@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/api-auth'
 import { checkRateLimitAndRespond } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
-import { createNotificationMySQL, getUserIdByEmail } from '@/lib/database-mysql'
+import { createNotification, getUserIdByEmail } from '@/lib/database'
 import { sendTelegramNotification } from '@/lib/notifications'
 
 export const runtime = 'nodejs'
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     const finalMessage = title ? `**${title}**\n${message}` : message
-    const saved = await createNotificationMySQL({
+    const saved = await createNotification({
       userId: targetUserId,
       type,
       message: finalMessage,

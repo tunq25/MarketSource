@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseToken } from '@/lib/api-auth';
-import { getUserIdByEmail, query, queryOne, withTransaction } from '@/lib/database-mysql';
+import { getUserIdByEmail, query, queryOne, withTransaction } from '@/lib/database';
 import { checkRateLimitAndRespond } from '@/lib/rate-limit';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Tìm coupon theo code
     const coupon = await queryOne<any>(`
       SELECT * FROM coupons 
-      WHERE code = ? AND is_active = TRUE
+      WHERE code = $1 AND is_active = TRUE
     `, [couponCode]);
 
     if (!coupon) {
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     // Kiểm tra xem user đã sử dụng coupon này chưa
     const usedCoupon = await queryOne<any>(`
       SELECT * FROM user_coupons 
-      WHERE user_id = ? AND coupon_id = ?
+      WHERE user_id = $1 AND coupon_id = $2
     `, [userId, coupon.id]);
 
     if (usedCoupon) {
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     // Kiểm tra giới hạn số lần sử dụng (nếu có)
     if (coupon.usage_limit && coupon.usage_limit > 0) {
       const usageCountResult = await queryOne<any>(`
-        SELECT COUNT(*) as count FROM user_coupons WHERE coupon_id = ?
+        SELECT COUNT(*) as count FROM user_coupons WHERE coupon_id = $1
       `, [coupon.id]);
 
       const usageCount = usageCountResult ? Number(usageCountResult.count) : 0;
@@ -114,18 +114,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Lưu vào user_coupons (đánh dấu đã áp dụng)
-    // Note: Coupon sẽ được áp dụng khi checkout, ở đây chỉ lưu để tracking
     try {
-      await withTransaction(async (conn) => {
-        await conn.query(`
+      await withTransaction(async (client) => {
+        await client.query(`
           INSERT INTO user_coupons (user_id, coupon_id, used_at)
-          VALUES (?, ?, NOW())
-          ON DUPLICATE KEY UPDATE used_at = NOW()
+          VALUES ($1, $2, CURRENT_TIMESTAMP)
+          ON CONFLICT (user_id, coupon_id) DO UPDATE SET used_at = CURRENT_TIMESTAMP
         `, [userId, coupon.id]);
       });
     } catch (error: any) {
-      // Nếu table user_coupons không tồn tại, chỉ log warning
-      if (error.message?.includes("doesn't exist") || error.message?.includes("Unknown table")) {
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
         logger.warn('user_coupons table does not exist, skipping tracking');
       } else {
         throw error;
@@ -155,4 +153,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
