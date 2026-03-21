@@ -315,27 +315,27 @@ export async function updateBalance(
   client?: PoolClient
 ): Promise<{ success: boolean; newBalance: number }> {
   const poolOrClient = client || pool;
-  
+
   try {
     // Lock row if in transaction
     const lockQuery = client ? ' FOR UPDATE' : '';
-    
+
     // Get current balance (for validation only)
     const userRes = await poolOrClient.query(
       `SELECT balance FROM users WHERE id = $1${lockQuery}`,
       [userId]
     );
-    
+
     if (userRes.rows.length === 0) {
       throw new Error('User not found');
     }
-    
+
     const currentBalance = parseFloat(userRes.rows[0].balance || '0');
-    
+
     if (type === 'decrease' && currentBalance < amount) {
       throw new Error(`Insufficient balance. Current: ${currentBalance}, Required: ${amount}`);
     }
-    
+
     // ✅ FIX: Use SQL arithmetic to avoid JS float precision loss
     let updateResult;
     if (type === 'increase') {
@@ -352,7 +352,7 @@ export async function updateBalance(
         throw new Error(`Insufficient balance for atomic update.`);
       }
     }
-    
+
     const newBalance = parseFloat(updateResult.rows[0].balance);
     return { success: true, newBalance };
   } catch (error) {
@@ -869,7 +869,7 @@ export async function normalizeUserId(
 
     // Ưu tiên tìm theo Firebase UID (nếu có), sau đó là Email, cuối cùng là Username
     // Điều này tránh tranh chấp nếu một username trùng với một email của user khác
-    
+
     // 1. External auth UID (Firebase / OAuth) — cột trong DB là `uid`, không phải `firebase_uid`
     const resUid = await pool.query(
       "SELECT id FROM users WHERE uid = $1 AND deleted_at IS NULL",
@@ -878,10 +878,10 @@ export async function normalizeUserId(
     if (resUid.rows.length > 0) return Number(resUid.rows[0].id);
 
     // 2. Email (search param hoặc userEmail)
-    const emailToSearch = (typeof firebaseUidOrEmail === 'string' && firebaseUidOrEmail.includes('@')) 
-      ? firebaseUidOrEmail 
+    const emailToSearch = (typeof firebaseUidOrEmail === 'string' && firebaseUidOrEmail.includes('@'))
+      ? firebaseUidOrEmail
       : userEmail;
-      
+
     if (emailToSearch) {
       const resEmail = await pool.query("SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL", [emailToSearch]);
       if (resEmail.rows.length > 0) return Number(resEmail.rows[0].id);
@@ -1036,7 +1036,7 @@ export async function createDeposit(depositData: {
       throw new Error('Cannot resolve user ID. User may not exist in database.');
     }
 
-  // ✅ FIX BUG-A6: Cache kết quả check schema thay vì query mỗi lần
+    // ✅ FIX BUG-A6: Cache kết quả check schema thay vì query mỗi lần
     let hasTransactionId = depositsSchemaCache;
     if (hasTransactionId === null) {
       try {
@@ -1260,6 +1260,28 @@ export async function createWithdrawal(withdrawalData: {
   userEmail?: string;
   idempotencyKey?: string | null;
 }) {
+  // ✅ FIX: Validate amount trước khi vào transaction
+  const WITHDRAWAL_MIN = 5_000; // 5,000 VND minimum
+
+  const amount = Number(withdrawalData.amount);
+  if (isNaN(amount) || amount <= 0) {
+    throw new Error('Số tiền rút phải lớn hơn 0');
+  }
+  if (amount < WITHDRAWAL_MIN) {
+    throw new Error(`Số tiền rút tối thiểu là ${WITHDRAWAL_MIN.toLocaleString('vi-VN')}đ`);
+  }
+
+  // ✅ Validate bank info
+  if (!withdrawalData.bankName?.trim()) {
+    throw new Error('Tên ngân hàng không được để trống');
+  }
+  if (!withdrawalData.accountNumber?.trim()) {
+    throw new Error('Số tài khoản không được để trống');
+  }
+  if (!withdrawalData.accountName?.trim()) {
+    throw new Error('Tên chủ tài khoản không được để trống');
+  }
+
   const idem = withdrawalData.idempotencyKey?.trim();
 
   return await withTransaction(async (client) => {
@@ -1357,22 +1379,22 @@ export async function createWithdrawal(withdrawalData: {
              RETURNING id, created_at`,
         hasIdem
           ? [
-              dbUserId,
-              withdrawalData.amount,
-              withdrawalData.bankName,
-              withdrawalData.accountNumber,
-              withdrawalData.accountName,
-              withdrawalData.userEmail || null,
-              idem,
-            ]
+            dbUserId,
+            withdrawalData.amount,
+            withdrawalData.bankName,
+            withdrawalData.accountNumber,
+            withdrawalData.accountName,
+            withdrawalData.userEmail || null,
+            idem,
+          ]
           : [
-              dbUserId,
-              withdrawalData.amount,
-              withdrawalData.bankName,
-              withdrawalData.accountNumber,
-              withdrawalData.accountName,
-              withdrawalData.userEmail || null,
-            ]
+            dbUserId,
+            withdrawalData.amount,
+            withdrawalData.bankName,
+            withdrawalData.accountNumber,
+            withdrawalData.accountName,
+            withdrawalData.userEmail || null,
+          ]
       );
     } catch (e: any) {
       if (e?.code === '23505' && idem) {
@@ -1439,7 +1461,7 @@ export async function updateWithdrawalStatus(
         [withdrawal.user_id]
       );
       const currentBalance = parseFloat(userResult.rows[0]?.balance || '0');
-      
+
       if (currentBalance < parseFloat(withdrawal.amount)) {
         throw new Error('User does not have enough balance to re-approve this withdrawal');
       }
@@ -1453,9 +1475,9 @@ export async function updateWithdrawalStatus(
     // 4. Update status
     const updates: string[] = [];
     const params: any[] = [status, withdrawalId];
-    
+
     updates.push('status = $1');
-    
+
     if (status === 'approved' && approvedBy) {
       updates.push('approved_time = CURRENT_TIMESTAMP');
       updates.push(`approved_by = $${params.length + 1}`);
@@ -1734,7 +1756,7 @@ export async function createBulkPurchase(purchaseData: {
         'SELECT id, price, is_active, title FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
         [productIdNum]
       );
-      
+
       const product = productRes.rows[0];
       if (!product) throw new Error(`Sản phẩm #${item.id} không tồn tại hoặc đã bị xóa`);
       if (!product.is_active) throw new Error(`Sản phẩm "${product.title}" hiện không khả dụng`);
@@ -2792,7 +2814,7 @@ export async function applyCoupon(userId: number, couponCode: string) {
   const client: PoolClient = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     const couponResult = await client.query(
       `SELECT * FROM coupons
        WHERE code = $1 AND is_active = TRUE
