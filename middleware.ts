@@ -102,6 +102,7 @@ export async function middleware(request: NextRequest) {
       '/api/health',
       '/api/csrf',
       '/api/admin-login',
+      '/api/logs',
     ]
     if (!csrfExempt.some((p) => pathname.startsWith(p))) {
       const csrfHeader = request.headers.get('X-CSRF-Token')
@@ -172,6 +173,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|favicon\\.png|manifest\\.json|sw\\.js|logoqtusdev\\.png|og-image\\.png|placeholder.*|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)',
   ],
 }
