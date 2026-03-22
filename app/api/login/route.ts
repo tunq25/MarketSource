@@ -3,6 +3,14 @@ import { getUserByEmail, createOrUpdateUser } from '@/lib/database';
 import { getClientIP } from '@/lib/api-auth';
 import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
+import { z } from 'zod';
+
+const loginSchema = z.object({
+  email: z.string().email('Email không hợp lệ'),
+  password: z.string().min(1, 'Mật khẩu là bắt buộc'),
+  captchaToken: z.string().optional(),
+  rememberMe: z.boolean().optional(),
+});
 
 /**
  * API Login - Xác thực user với email/password
@@ -17,8 +25,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    let { email, password, captchaToken, rememberMe } = body;
-    email = email?.trim().toLowerCase();
+    const validation = loginSchema.safeParse(body);
+    
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: validation.error.errors[0]?.message || 'Dữ liệu không hợp lệ' },
+        { status: 400 }
+      );
+    }
+
+    let { email, password, captchaToken, rememberMe } = validation.data;
+    email = email.trim().toLowerCase();
     /** Ghi nhớ đăng nhập: cookie + JWT dài hơn (thiết bị vẫn đăng nhập sau khi đóng trình duyệt) */
     const persistSession = Boolean(rememberMe);
     const sessionMaxAgeSec = persistSession

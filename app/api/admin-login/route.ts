@@ -63,17 +63,16 @@ export async function POST(request: NextRequest) {
         adminNameFinal = dbUser.name || 'Admin'
       }
     } else {
-      // 2. Nếu DB không có (hoặc ko phải admin), fallback về ENV credential
+      // 2. Nếu DB không có (hoặc ko phải admin), fallback về ENV credential (chỉ cho Hash)
       const adminEmailEnv = process.env.ADMIN_EMAIL || ''
       const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH || ''
-      const adminPasswordPlain = process.env.ADMIN_PASSWORD || ''
 
       if (email === adminEmailEnv) {
         if (adminPasswordHash) {
           isValid = await bcryptjs.compare(password, adminPasswordHash)
-        } else if (adminPasswordPlain) {
-          // Cho phép so sánh mật khẩu plain-text ở production theo cấu hình hiện tại của Vercel
-          isValid = password === adminPasswordPlain
+        } else {
+          logger.warn('ADMIN_PASSWORD_HASH chưa được cấu hình. Từ chối fallback account!');
+          isValid = false;
         }
         adminEmailFinal = adminEmailEnv
       }

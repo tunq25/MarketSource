@@ -13,6 +13,11 @@ export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ Rate Limiting: Chống spam Admin actions (100req/h)
+    const { checkRateLimitAndRespond } = await import('@/lib/rate-limit');
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 100, 3600, 'admin-approve-deposit');
+    if (rateLimitResponse) return rateLimitResponse;
+
     // ✅ SECURITY FIX: CSRF protection cho admin routes
     const { csrfProtection } = await import('@/lib/csrf');
     const csrfCheck = csrfProtection(request);

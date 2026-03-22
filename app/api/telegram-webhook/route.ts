@@ -5,6 +5,13 @@ export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
+    // ✅ Webhook Verification chống Spoofing
+    const telegramSecret = process.env.TELEGRAM_SECRET_TOKEN;
+    if (telegramSecret && request.headers.get('X-Telegram-Bot-API-Secret-Token') !== telegramSecret) {
+      logger.warn('Unauthorized telegram webhook attempt');
+      return NextResponse.json({ error: 'Unauthorized webhook' }, { status: 401 });
+    }
+
     const body = await request.json()
     
     // Handle callback queries (button presses)
