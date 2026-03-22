@@ -22,10 +22,11 @@ export async function getUserPurchases(
   if (!dbUserId) return []
 
   const rows = await query<PurchaseRow>(
-    `SELECT id, user_id as user_uid, product_id, product_title, amount, status, created_at
-     FROM purchases
-     WHERE user_id = $1
-     ORDER BY created_at DESC
+    `SELECT p.id, p.user_id as user_uid, p.product_id, pr.title as product_title, p.amount, p.status, p.created_at 
+     FROM purchases p
+     LEFT JOIN products pr ON p.product_id = pr.id
+     WHERE p.user_id = $1 
+     ORDER BY p.created_at DESC 
      LIMIT $2`,
     [dbUserId, limit],
   )
