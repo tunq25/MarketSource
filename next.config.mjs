@@ -139,6 +139,7 @@ const nextConfig = {
     return [
       { source: '/login', destination: '/auth/login', permanent: false },
       { source: '/register', destination: '/auth/register', permanent: false },
+      { source: '/contact', destination: '/support', permanent: false },
     ]
   },
   // ✅ FIX: Redirects để xử lý các requests không tồn tại
