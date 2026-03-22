@@ -102,7 +102,6 @@ export async function middleware(request: NextRequest) {
       '/api/health',
       '/api/csrf',
       '/api/admin-login',
-      '/api/analytics/track',
     ]
     if (!csrfExempt.some((p) => pathname.startsWith(p))) {
       const csrfHeader = request.headers.get('X-CSRF-Token')

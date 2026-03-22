@@ -97,13 +97,23 @@ function ImagePreview({ src, alt, size = 'md', className = '' }: { src: string; 
 
   // ✅ BUG #13 FIX: Sanitize image URL to prevent XSS (javascript:alert(1))
   const isSafeImage = (url: string) => {
-    if (!url) return false;
+    if (!url || typeof url !== 'string') return false;
     const lower = url.toLowerCase().trim();
-    if (lower.startsWith('javascript:')) return false;
-    if (lower.startsWith('data:')) {
-      return lower.startsWith('data:image/');
+    const dangerousProtocols = [
+      'javascript:', 'data:', 'vbscript:', 'blob:',
+      'about:', 'file:', 'chrome-extension:', 'moz-extension:'
+    ];
+    if (dangerousProtocols.some(proto => lower.startsWith(proto))) {
+      return false;
     }
-    return true;
+    // Only allow HTTP/HTTPS
+    try {
+      const urlObj = new URL(url);
+      if (!['http:', 'https:'].includes(urlObj.protocol)) return false;
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   if (!src) return (

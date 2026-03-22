@@ -234,11 +234,15 @@ export default function ProductDetailPage() {
                                                 const raw = product.detailedDescription || '';
                                                 let html = raw;
                                                 
-                                                // ✅ FIX: Đồng bộ Regex render Markdown giống hệt Admin Panel
+                                                // ✅ FIX: Đồng bộ Regex render Markdown + Escape HTML trước để tránh Regex XSS Bypass
                                                 const isHtml = /<[a-z][\s\S]*>/i.test(raw);
                                                 
                                                 if (!isHtml || raw.includes('**') || raw.includes('##')) {
-                                                    html = raw
+                                                    const escapedRaw = raw
+                                                      .replace(/&/g, '&amp;')
+                                                      .replace(/</g, '&lt;')
+                                                      .replace(/>/g, '&gt;');
+                                                    html = escapedRaw
                                                         .replace(/\n/g, '<br/>')
                                                         .replace(/\*\*(.*?)\*\*/g, '<strong class="text-gray-900 dark:text-white">$1</strong>')
                                                         .replace(/\*(.*?)\*/g, '<em class="text-gray-600 dark:text-gray-400">$1</em>')
