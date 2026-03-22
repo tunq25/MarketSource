@@ -60,9 +60,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!type || !['increase', 'decrease'].includes(type)) {
+    if (!type || !['increase', 'decrease', 'set'].includes(type)) {
       return NextResponse.json(
-        { success: false, error: 'type must be "increase" or "decrease"' },
+        { success: false, error: 'type must be "increase", "decrease" or "set"' },
         { status: 400 }
       );
     }
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       await logAdminAction({
         adminId,
         adminEmail: admin.email || undefined,
-        action: type === 'increase' ? 'ADMIN_BALANCE_INCREASE' : 'ADMIN_BALANCE_DECREASE',
+        action: type === 'set' ? 'ADMIN_BALANCE_SET' : (type === 'increase' ? 'ADMIN_BALANCE_INCREASE' : 'ADMIN_BALANCE_DECREASE'),
         targetType: 'user',
         targetId: String(dbUserId),
         details: {
@@ -120,11 +120,12 @@ export async function POST(request: NextRequest) {
     // ✅ Notification
     try {
       const { createNotification } = await import('@/lib/database');
-      const actionText = type === 'increase' ? 'cộng' : 'trừ';
+      const actionText = type === 'set' ? 'điều chỉnh' : (type === 'increase' ? 'cộng' : 'trừ');
+      const connectionWord = type === 'set' ? 'thành' : (type === 'increase' ? 'vào' : 'khỏi');
       await createNotification({
         userId: dbUserId,
         type: `balance_${type}`,
-        message: `Admin đã ${actionText} ${numAmount.toLocaleString('vi-VN')}đ ${type === 'increase' ? 'vào' : 'khỏi'} tài khoản của bạn. ${reason ? `Lý do: ${reason}` : ''} Số dư hiện tại: ${result.newBalance.toLocaleString('vi-VN')}đ`,
+        message: `Admin đã ${actionText} số dư tài khoản của bạn ${connectionWord} ${numAmount.toLocaleString('vi-VN')}đ. ${reason ? `Lý do: ${reason}` : ''} Số dư hiện tại: ${result.newBalance.toLocaleString('vi-VN')}đ`,
         isRead: false,
       });
     } catch {

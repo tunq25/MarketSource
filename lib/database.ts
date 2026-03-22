@@ -316,7 +316,7 @@ export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>)
 export async function updateBalance(
   userId: number,
   amount: number,
-  type: 'increase' | 'decrease',
+  type: 'increase' | 'decrease' | 'set',
   client?: PoolClient
 ): Promise<{ success: boolean; newBalance: number }> {
   const poolOrClient = client || pool;
@@ -344,6 +344,18 @@ export async function updateBalance(
       [amount, userId]
     );
     if (updateResult.rows.length > 0) {
+      const newBalance = parseFloat(updateResult.rows[0].balance);
+      return { success: true, newBalance };
+    }
+
+    if (type === 'set') {
+      const updateResult = await poolOrClient.query(
+        'UPDATE users SET balance = $1::numeric, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING balance',
+        [amount, userId]
+      );
+      if (updateResult.rows.length === 0) {
+        throw new Error('User not found');
+      }
       const newBalance = parseFloat(updateResult.rows[0].balance);
       return { success: true, newBalance };
     }
@@ -1204,35 +1216,53 @@ export async function updateDepositStatus(
   status: 'pending' | 'approved' | 'rejected',
   approvedBy?: string
 ) {
-  try {
-    // ✅ FIX: Whitelist updates để tránh SQL injection
-    const allowedColumns = ['status', 'approved_time', 'approved_by'];
-    const updates: string[] = [];
-    const params: any[] = [depositId];
-    let paramIndex = 2;
+  return await withTransaction(async (client) => {
+    // 1. Lock deposit row
+    const depositResult = await client.query(
+      'SELECT status FROM deposits WHERE id = $1 FOR UPDATE',
+      [depositId]
+    );
 
-    // Status is always required
-    updates.push(`status = $${paramIndex}`);
-    params.push(status);
-    paramIndex++;
+    if (depositResult.rows.length === 0) {
+      throw new Error('Deposit not found');
+    }
+
+    const currentStatus = depositResult.rows[0].status;
+
+    // 2. Bảo vệ: Nếu đã Approved hoặc Rejected thì không cho phép quay ngược trạng thái
+    // (Approved là trạng thái cuối cùng có ảnh hưởng đến Balance, không được đổi bậy bạ)
+    if (currentStatus === 'approved' && status !== 'approved') {
+      throw new Error(`Cannot change status from ${currentStatus} to ${status}. Approved deposits are final!`);
+    }
+
+    if (currentStatus === 'rejected' && status !== 'rejected' && status !== 'approved') {
+      // Cho phép Rejected -> Approved (có thể do bấm nhầm), nhưng phải thông qua approveDepositAndUpdateBalance
+      // Ở đây ta chỉ chặn if status là pending
+       if (status === 'pending') {
+         throw new Error(`Cannot change status from ${currentStatus} to pending.`);
+       }
+    }
+
+    // Nếu status không đổi thì return luôn
+    if (currentStatus === status) return;
+
+    // 3. Update status
+    const updates: string[] = [];
+    const params: any[] = [status, depositId];
+    
+    updates.push('status = $1');
 
     if (status === 'approved' && approvedBy) {
-      updates.push(`approved_time = CURRENT_TIMESTAMP`);
-      updates.push(`approved_by = $${paramIndex}`);
+      updates.push('approved_time = CURRENT_TIMESTAMP');
+      updates.push(`approved_by = $${params.length + 1}`);
       params.push(approvedBy);
-      paramIndex++;
     }
 
-    if (updates.length > 0) {
-      await pool.query(
-        `UPDATE deposits SET ${updates.join(', ')} WHERE id = $1`,
-        params
-      );
-    }
-  } catch (error) {
-    logger.error('Error updating deposit status', error, { depositId, status });
-    throw error;
-  }
+    await client.query(
+      `UPDATE deposits SET ${updates.join(', ')} WHERE id = $2`,
+      params
+    );
+  });
 }
 
 /**
@@ -1555,8 +1585,8 @@ export async function updateWithdrawalStatus(
     // No change needed if status is the same
     if (withdrawal.status === status) return;
 
-    // 2. Handle Refund: Pending -> Rejected
-    if (withdrawal.status === 'pending' && status === 'rejected') {
+    // 2. Handle Refund: Pending/Approved -> Rejected
+    if ((withdrawal.status === 'pending' || withdrawal.status === 'approved') && status === 'rejected') {
       await client.query(
         'UPDATE users SET balance = balance + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         [withdrawal.amount, withdrawal.user_id]
