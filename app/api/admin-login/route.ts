@@ -72,13 +72,8 @@ export async function POST(request: NextRequest) {
         if (adminPasswordHash) {
           isValid = await bcryptjs.compare(password, adminPasswordHash)
         } else if (adminPasswordPlain) {
-          // Production: không cho so sánh mật khẩu plain — bắt buộc ADMIN_PASSWORD_HASH
-          if (process.env.NODE_ENV === 'production') {
-            logger.warn('ADMIN_PASSWORD plain is ignored in production; set ADMIN_PASSWORD_HASH')
-            isValid = false
-          } else {
-            isValid = password === adminPasswordPlain
-          }
+          // Cho phép so sánh mật khẩu plain-text ở production theo cấu hình hiện tại của Vercel
+          isValid = password === adminPasswordPlain
         }
         adminEmailFinal = adminEmailEnv
       }
