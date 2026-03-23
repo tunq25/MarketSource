@@ -21,12 +21,13 @@ export interface ProductReview {
 
 interface ReviewManagerProps {
   reviews: ProductReview[]
+  purchasedProducts?: { id: string | number, productId?: string | number, title: string }[]
   onCreate?: (review: Omit<ProductReview, "id" | "createdAt">) => void
   onUpdate?: (review: ProductReview) => void
   onDelete?: (id: string) => void
 }
 
-export function ReviewManager({ reviews, onCreate, onUpdate, onDelete }: ReviewManagerProps) {
+export function ReviewManager({ reviews, purchasedProducts = [], onCreate, onUpdate, onDelete }: ReviewManagerProps) {
   const [form, setForm] = useState({ productId: "", productTitle: "", rating: 5, comment: "" })
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -49,18 +50,33 @@ export function ReviewManager({ reviews, onCreate, onUpdate, onDelete }: ReviewM
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
-            <input
-              className="w-full border rounded-md px-3 py-2 text-sm"
-              placeholder="ID sản phẩm"
+            <select
+              className="w-full border rounded-md px-3 py-2 text-sm bg-background"
               value={form.productId}
-              onChange={(e) => setForm((prev) => ({ ...prev, productId: e.target.value }))}
-            />
-            <input
-              className="w-full border rounded-md px-3 py-2 text-sm"
-              placeholder="Tên sản phẩm"
-              value={form.productTitle}
-              onChange={(e) => setForm((prev) => ({ ...prev, productTitle: e.target.value }))}
-            />
+              onChange={(e) => {
+                const selectedId = e.target.value;
+                const prod = purchasedProducts.find(p => String(p.productId || p.id) === selectedId);
+                setForm(prev => ({ 
+                  ...prev, 
+                  productId: selectedId, 
+                  productTitle: prod ? prod.title : "" 
+                }))
+              }}
+            >
+              <option value="">-- Chọn sản phẩm đã mua --</option>
+              {purchasedProducts.map(p => {
+                const valId = String(p.productId || p.id);
+                return (
+                  <option key={p.id + '-' + valId} value={valId}>
+                    {p.title}
+                  </option>
+                )
+              })}
+            </select>
+            {/* Ẩn input Tên sản phẩm, nhưng vẫn gửi đính kèm productTitle hoặc hiển thị readOnly nếu cần */}
+            {form.productTitle && (
+              <p className="text-xs text-muted-foreground mt-1">Sản phẩm: {form.productTitle}</p>
+            )}
             <div>
               <p className="text-xs text-muted-foreground mb-1">Đánh giá</p>
               <div className="flex gap-1">

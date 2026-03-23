@@ -57,33 +57,41 @@ async function checkRateLimitMemory(
 let ratelimit: any = null
 
 async function getRatelimit() {
-  if (ratelimit) return ratelimit
+  if (ratelimit !== null) return ratelimit;
+
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+
+  if (!url || !token) {
+    return null;
+  }
 
   try {
-    const { Ratelimit } = await import('@upstash/ratelimit')
-    const { Redis } = await import('@upstash/redis')
+    const { Ratelimit } = await import('@upstash/ratelimit');
+    const { Redis } = await import('@upstash/redis');
 
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-      // console.warn('Upstash Redis not configured, using in-memory rate limiting')
-      return null
-    }
+    const redis = new Redis({
+      url,
+      token,
+    });
 
     ratelimit = new Ratelimit({
-      redis: Redis.fromEnv(),
+      redis,
+      // Default limiter, will be overridden or used as base
       limiter: Ratelimit.slidingWindow(10, '10 s'),
       analytics: true,
-    })
-
-    return ratelimit
-  } catch (error: any) {
-    // ✅ FIX: Chỉ log warning nếu không phải lỗi auth (WRONGPASS)
-    if (error?.message?.includes('WRONGPASS') || error?.message?.includes('invalid or missing auth token')) {
-      // Upstash credentials không đúng, fallback về memory - không cần log nhiều
-      // console.warn('Upstash Redis credentials invalid, using in-memory rate limiting');
-    } else {
-      // console.warn('Upstash not available, using in-memory rate limiting:', error?.message || error);
-    }
-    return null
+      /**
+       * Optional prefix for the keys used in redis. This is useful if you want to share a redis
+       * instance with other applications and want to avoid key collisions. The default prefix is
+       * @upstash/ratelimit
+       */
+      prefix: '@upstash/ratelimit',
+    });
+    
+    return ratelimit;
+  } catch (error) {
+    // console.warn('Failed to initialize Upstash Redis ratelimit', error);
+    return null;
   }
 }
 
@@ -99,7 +107,31 @@ export async function checkRateLimit(
   }
 
   try {
-    const result = await ratelimitInstance.limit(identifier)
+    // Create a dynamic override for the specific window and limit if they differ
+    // Note: Upstash doesn't easily allow dynamic changing of limits per request on the same Ratelimit instance,
+    // so we re-instantiate locally if needed, or we just rely on the default if it matches.
+    const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+    
+    let specificLimit = ratelimitInstance;
+    
+    // If we have custom limits, instantiate temporarily
+    if (url && token && (limit !== 10 || window !== 10)) {
+        const { Ratelimit } = await import('@upstash/ratelimit');
+        const { Redis } = await import('@upstash/redis');
+        const redis = new Redis({ url, token });
+        specificLimit = new Ratelimit({
+            redis,
+            limiter: Ratelimit.slidingWindow(limit, `${window} s`),
+            analytics: false,
+            prefix: `@upstash/ratelimit/dyn_${limit}_${window}`,
+        });
+    }
+
+    const result = await Promise.race([
+      specificLimit.limit(identifier),
+      new Promise<any>((_, reject) => setTimeout(() => reject(new Error('Rate limit timeout')), 5000))
+    ])
     return {
       success: result.success,
       limit: result.limit,

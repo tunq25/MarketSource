@@ -172,18 +172,8 @@ function AdminPageContent() {
     }
   }, [backups.length])
 
-  useEffect(() => {
-    const reviewSamples = purchases.slice(0, 5).map((purchase: any) => ({
-      id: `review-${purchase.id}`,
-      productTitle: purchase.product_title || "Sản phẩm",
-      userEmail: purchase.userEmail || "user@example.com",
-      rating: purchase.rating || 5,
-      comment: purchase.review || "Phản hồi đang chờ cập nhật.",
-      status: "pending",
-      createdAt: purchase.created_at || new Date().toISOString(),
-    }))
-    setAdminReviews(reviewSamples)
-  }, [purchases])
+  // Removed sample reviews useEffect as we fetch from API now
+
 
   useEffect(() => {
     const logs: AuditLog[] = [
@@ -242,12 +232,17 @@ function AdminPageContent() {
       const { logger } = await import('@/lib/logger');
 
       // Tải song song tất cả dữ liệu cần thiết cho dashboard
-      const [productsRes, purchasesRes, users, depositsWithdrawals] = await Promise.all([
+      const [productsRes, purchasesRes, users, depositsWithdrawals, reviewsRes] = await Promise.all([
         apiGet('/api/products'),
         apiGet('/api/purchases'),
         userManager.getAllUsers(),
-        loadDepositsAndWithdrawals()
+        loadDepositsAndWithdrawals(),
+        apiGet('/api/admin/reviews')
       ]);
+
+      if (reviewsRes.success) {
+        setAdminReviews(reviewsRes.reviews);
+      }
 
       // 1. Cập nhật Products
       if (productsRes.success && productsRes.products) {
@@ -1666,24 +1661,62 @@ Hệ thống thông báo đang hoạt động bình thường.`
     }, 1500)
   }, [])
 
-  const handleAdminReviewApprove = useCallback((id: string) => {
-    setAdminReviews((prev) => prev.map((review) => (review.id === id ? { ...review, status: "published" } : review)))
+  const handleAdminReviewApprove = useCallback(async (id: string) => {
+    try {
+      const { apiPost } = await import('@/lib/api-client');
+      const res = await apiPost(`/api/admin/reviews/${id}/approve`, { action: 'approve' });
+      if (res.success) {
+        setAdminReviews((prev) => prev.map((review) => (review.id === id ? { ...review, status: "published" } : review)));
+      } else {
+        alert(res.error || "Không thể duyệt đánh giá");
+      }
+    } catch (err: any) {
+      alert("Lỗi khi duyệt đánh giá: " + err.message);
+    }
   }, [])
 
   const handleAdminReviewReject = useCallback(async (id: string, reason: string) => {
-    const { logger } = await import('@/lib/logger');
-    logger.debug("Reject review", { id, reason })
-    setAdminReviews((prev) => prev.map((review) => (review.id === id ? { ...review, status: "rejected" } : review)))
+    try {
+      const { apiPost } = await import('@/lib/api-client');
+      const res = await apiPost(`/api/admin/reviews/${id}/approve`, { action: 'reject', adminResponse: reason });
+      if (res.success) {
+        setAdminReviews((prev) => prev.map((review) => (review.id === id ? { ...review, status: "rejected", admin_response: reason } : review)));
+      } else {
+        alert(res.error || "Không thể từ chối đánh giá");
+      }
+    } catch (err: any) {
+      alert("Lỗi khi từ chối đánh giá: " + err.message);
+    }
   }, [])
 
-  const handleAdminReviewDelete = useCallback((id: string) => {
-    setAdminReviews((prev) => prev.filter((review) => review.id !== id))
+  const handleAdminReviewDelete = useCallback(async (id: string) => {
+    if (!confirm("Bạn có chắc chắn muốn xóa đánh giá này?")) return;
+    try {
+      const { apiDelete } = await import('@/lib/api-client');
+      const res = await apiDelete(`/api/reviews`, { body: JSON.stringify({ reviewId: id }) });
+      if (res.success) {
+        setAdminReviews((prev) => prev.filter((review) => review.id !== id));
+      } else {
+        alert(res.error || "Không thể xóa đánh giá");
+      }
+    } catch (err: any) {
+      alert("Lỗi khi xóa đánh giá: " + err.message);
+    }
   }, [])
 
   const handleAdminReviewRespond = useCallback(async (id: string, message: string) => {
-    const { logger } = await import('@/lib/logger');
-    logger.debug("Respond review", { id, message })
-    alert("Đã lưu phản hồi cho người dùng.")
+    try {
+      const { apiPost } = await import('@/lib/api-client');
+      const res = await apiPost(`/api/admin/reviews/${id}/approve`, { action: 'respond', adminResponse: message });
+      if (res.success) {
+        setAdminReviews((prev) => prev.map((review) => (review.id === id ? { ...review, admin_response: message } : review)));
+        alert("Đã gửi phản hồi cho người dùng.");
+      } else {
+        alert(res.error || "Không thể gửi phản hồi");
+      }
+    } catch (err: any) {
+      alert("Lỗi khi phản hồi đánh giá: " + err.message);
+    }
   }, [])
 
   if (isLoading) {
@@ -1734,12 +1767,12 @@ Hệ thống thông báo đang hoạt động bình thường.`
           <div className="flex items-center gap-3 px-2">
             <Logo />
             <div className="space-y-0.5">
-              <p className="text-sm font-semibold text-slate-100">Admin</p>
-              <p className="text-[11px] text-slate-400">Control center</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Admin</p>
+              <p className="text-[11px] text-muted-foreground dark:text-slate-400">Control center</p>
             </div>
           </div>
 
-          <div className="mt-6 space-y-4 text-xs font-medium text-slate-400">
+          <div className="mt-6 space-y-4 text-xs font-medium text-muted-foreground dark:text-slate-400">
             <p className="px-2 uppercase tracking-[0.16em]">Tổng quan</p>
             <nav className="space-y-1">
               <button
@@ -1747,7 +1780,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("overview")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "overview"
                   ? "bg-sky-500 text-white shadow-md shadow-sky-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <LayoutDashboard className="h-4 w-4" />
@@ -1758,7 +1791,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("analytics")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "analytics"
                   ? "bg-violet-500 text-white shadow-md shadow-violet-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <BarChart3 className="h-4 w-4" />
@@ -1773,7 +1806,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("products")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "products"
                   ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Package className="h-4 w-4" />
@@ -1784,7 +1817,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("users")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "users"
                   ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Users className="h-4 w-4" />
@@ -1800,7 +1833,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("deposits")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "deposits"
                   ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Wallet className="h-4 w-4" />
@@ -1816,7 +1849,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("withdrawals")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "withdrawals"
                   ? "bg-orange-500 text-white shadow-md shadow-orange-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <ArrowDownUp className="h-4 w-4" />
@@ -1832,7 +1865,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("transactions")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "transactions"
                   ? "bg-teal-500 text-white shadow-md shadow-teal-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Receipt className="h-4 w-4" />
@@ -1847,7 +1880,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("reviews")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "reviews"
                   ? "bg-yellow-500 text-slate-950 shadow-md shadow-yellow-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Star className="h-4 w-4" />
@@ -1858,7 +1891,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("chat")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "chat"
                   ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <MessageSquare className="h-4 w-4" />
@@ -1869,7 +1902,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("support")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "support"
                   ? "bg-pink-500 text-white shadow-md shadow-pink-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Headphones className="h-4 w-4" />
@@ -1880,7 +1913,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("notifications")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "notifications"
                   ? "bg-red-500 text-white shadow-md shadow-red-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Bell className="h-4 w-4" />
@@ -1891,7 +1924,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("settings")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "settings"
                   ? "bg-slate-700 text-white shadow-md shadow-slate-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Settings className="h-4 w-4" />
@@ -1902,7 +1935,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("appearance")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "appearance"
                   ? "bg-fuchsia-500 text-white shadow-md shadow-fuchsia-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Palette className="h-4 w-4" />
@@ -1917,7 +1950,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("announcements")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "announcements"
                   ? "bg-violet-500 text-white shadow-md shadow-violet-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Megaphone className="h-4 w-4" />
@@ -1928,7 +1961,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("faq")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "faq"
                   ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <HelpCircle className="h-4 w-4" />
@@ -1939,7 +1972,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("audit")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "audit"
                   ? "bg-slate-600 text-white shadow-md shadow-slate-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <FileText className="h-4 w-4" />
@@ -1950,7 +1983,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("promotions")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "promotions"
                   ? "bg-rose-500 text-white shadow-md shadow-rose-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Gift className="h-4 w-4" />
@@ -1961,7 +1994,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("reports")}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "reports"
                   ? "bg-sky-500 text-white shadow-md shadow-sky-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <FileBarChart className="h-4 w-4" />
@@ -1972,7 +2005,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
                 onClick={() => setActiveTab("backup")}
                 className={`mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all ${activeTab === "backup"
                   ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/30"
-                  : "text-slate-300 hover:bg-slate-800/80"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/80"
                   }`}
               >
                 <Database className="h-4 w-4" />
@@ -1982,20 +2015,20 @@ Hệ thống thông báo đang hoạt động bình thường.`
 
           </div>
 
-          <div className="mt-auto flex items-center justify-between gap-2 rounded-xl border border-slate-700/80 bg-slate-900/90 px-3 py-3">
+          <div className="mt-auto flex items-center justify-between gap-2 rounded-xl border border-border bg-card/90 dark:bg-slate-900/90 px-3 py-3">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-500/20">
                 <Shield className="h-5 w-5 text-sky-400" />
               </div>
               <div className="space-y-0.5">
-                <p className="text-xs font-medium text-slate-100">Chế độ bảo mật cao</p>
-                <p className="text-[11px] text-slate-400">Mọi thao tác đều được ghi log.</p>
+                <p className="text-xs font-medium text-foreground dark:text-slate-100">Chế độ bảo mật cao</p>
+                <p className="text-[11px] text-muted-foreground dark:text-slate-400">Mọi thao tác đều được ghi log.</p>
               </div>
             </div>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8 border-slate-700 bg-slate-900/80 text-slate-200 hover:bg-slate-800"
+              className="h-8 w-8 border-border bg-muted/80 text-foreground dark:bg-slate-900/80 dark:text-slate-200 dark:hover:bg-slate-800"
               onClick={handleLogout}
             >
               <LogOut className="h-4 w-4" />
@@ -2007,7 +2040,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
         <main className="flex-1">
           {/* Header */}
           <header className="border-b border-slate-200 dark:border-white/5 glass-panel">
-            <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="shrink-0 md:hidden">
                   <Logo />
@@ -2043,7 +2076,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
             </div>
 
             {/* Điều hướng nhanh — chỉ mobile (sidebar ẩn trên md) */}
-            <div className="mx-auto max-w-6xl px-4 pb-3 md:hidden">
+            <div className="mx-auto max-w-7xl px-4 pb-3 md:hidden">
               <Select value={activeTab} onValueChange={setActiveTab}>
                 <SelectTrigger className="h-12 w-full border-slate-200 bg-white text-left text-base dark:border-slate-700 dark:bg-slate-900">
                   <SelectValue placeholder="Chọn mục quản trị" />
@@ -2073,7 +2106,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
             </div>
 
             {/* Hàng thẻ thống kê nhanh */}
-            <div className="mx-auto max-w-6xl px-4 pb-4">
+            <div className="mx-auto max-w-7xl px-4 pb-4">
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
                   <CardHeader className="pb-2">
@@ -2133,7 +2166,7 @@ Hệ thống thông báo đang hoạt động bình thường.`
           </header>
 
           {/* Nội dung chính theo tab */}
-          <section className="mx-auto max-w-6xl px-3 py-5 sm:px-4 sm:py-6">
+          <section className="mx-auto max-w-7xl px-3 py-5 sm:px-4 sm:py-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
               <TabsContent value="overview">
                 <Overview

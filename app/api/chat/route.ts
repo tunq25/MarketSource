@@ -78,42 +78,45 @@ async function verifyAuthUser(request: NextRequest): Promise<{ email: string; ui
 }
 
 export async function POST(request: NextRequest) {
+  let body: any;
   try {
-    // ✅ Rate limiting
     const { checkRateLimitAndRespond } = await import('@/lib/rate-limit');
-    const rateLimitResponse = await checkRateLimitAndRespond(request, 15, 60, 'chat-post');
+    const rateLimitResponse = await checkRateLimitAndRespond(request, 20, 10, 'chat-post');
     if (rateLimitResponse) return rateLimitResponse;
 
     const authUser = await verifyAuthUser(request);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Vui lòng đăng nhập' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Vui lòng đăng nhập để gửi tin nhắn' }, { status: 401 });
     }
 
-    const body = await request.json();
+    body = await request.json();
     const validation = messageSchema.safeParse(body);
-
+    
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: validation.error.errors[0]?.message }, { status: 400 });
+      logger.warn('Chat validation failed', { errors: validation.error.format(), body });
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Dữ liệu không hợp lệ', 
+        details: validation.error.format() 
+      }, { status: 400 });
     }
 
-    const { receiverId, userId, message, isAdmin: frontendIsAdmin } = validation.data;
+    const { message, receiverId, userId } = validation.data;
     const sanitizedMessage = sanitizeMessage(message);
 
     if (!sanitizedMessage) {
-      return NextResponse.json({ success: false, error: 'Tin nhắn không hợp lệ' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Tin nhắn không được để trống hoặc chứa nội dung độc hại' }, { status: 400 });
     }
 
-    // Lấy thông tin sender từ database
     const sender = await queryOne<any>(
       "SELECT id, role FROM users WHERE email = $1",
       [authUser.email]
     );
 
     if (!sender) {
-      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'Không tìm thấy thông tin người gửi' }, { status: 404 });
     }
 
-    // ✅ FIX BUG: Kiểm tra quyền admin từ CẢ Token VÀ Database
     const adminCheck = await queryOne<any>(
       `SELECT a.id 
        FROM admin a
@@ -121,55 +124,95 @@ export async function POST(request: NextRequest) {
        UNION
        SELECT u.id
        FROM users u
-       WHERE u.id = $1 AND u.role IN ('admin', 'superadmin')
-       LIMIT 1`,
+       WHERE u.id = $1 AND u.role IN ('admin', 'superadmin')`,
       [sender.id]
     );
     
-    // Nếu session có role='admin' hoặc DB có role='admin'
-    const isAdmin = adminCheck !== null || authUser.role === 'admin';
+    const isAdminUser = adminCheck !== null || authUser.role === 'admin';
     const senderId = sender.id;
+    logger.info('Chat POST processed sender', { senderId, isAdminUser });
 
     let targetUserId: number;
     let targetAdminId: number | null;
+    let isActingAsAdmin = false;
 
-    if (isAdmin) {
+    if (isAdminUser && (receiverId || userId)) {
       const targetId = receiverId || userId;
-      if (!targetId) {
-        return NextResponse.json({ success: false, error: 'Admin cần chọn khách hàng để gửi tin' }, { status: 400 });
-      }
       targetUserId = Number(targetId);
-      targetAdminId = senderId;
+      targetAdminId = Number(senderId);
+      isActingAsAdmin = true;
+      logger.debug('Routing as Admin to user', { targetUserId, adminId: targetAdminId });
     } else {
-      targetUserId = senderId;
-      const adminUser = await queryOne<any>("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
-      targetAdminId = adminUser?.id || null;
+      targetUserId = Number(senderId);
+      // Find any admin to "own" the chat, excluding the user themselves if they are an admin testing
+      const adminUser = await queryOne<any>(
+        "SELECT id FROM users WHERE role IN ('admin', 'superadmin') AND deleted_at IS NULL AND id != $1 LIMIT 1",
+        [senderId]
+      );
+      targetAdminId = adminUser?.id ? Number(adminUser.id) : null;
+      isActingAsAdmin = false;
+      logger.debug('Routing as Customer to admin', { targetUserId, assignedAdminId: targetAdminId });
     }
 
-    // Lưu tin nhắn
+    if (isNaN(targetUserId)) {
+      throw new Error('ID người dùng không hợp lệ');
+    }
+
+    logger.debug('Chat creating message', { targetUserId, targetAdminId, isActingAsAdmin });
     const result = await createChat({
       userId: targetUserId,
       adminId: targetAdminId,
       message: sanitizedMessage,
-      isAdmin: isAdmin
+      isAdmin: isActingAsAdmin
     });
+    logger.info('Chat message saved', { chatId: result.id });
 
-    // ✅ Gemini Auto-Reply
     let autoReplyMessage: any = null;
-    if (!isAdmin && process.env.GEMINI_API_KEY && process.env.ENABLE_AUTO_REPLY === 'true') {
+    if (!isActingAsAdmin && process.env.GEMINI_API_KEY && process.env.ENABLE_AUTO_REPLY === 'true') {
       try {
-        autoReplyMessage = await generateAutoReply(sanitizedMessage, targetUserId);
-
-        if (autoReplyMessage) {
-          await createChat({
-            userId: targetUserId,
-            adminId: targetAdminId,
-            message: `🤖 ${autoReplyMessage}`,
-            isAdmin: true,
+        // Run AI in background if possible, or with strict timeout
+        logger.info('Starting AI auto-reply process', { targetUserId });
+        
+        let shouldSkipAI = false;
+        try {
+          const { Redis } = await import('@upstash/redis');
+          const redis = new Redis({
+            url: process.env.UPSTASH_REDIS_REST_URL!,
+            token: process.env.UPSTASH_REDIS_REST_TOKEN!
           });
+          const adminIsOnline = await Promise.race([
+            redis.get('admin_online_flag'),
+            new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 2000))
+          ]);
+          
+          if (adminIsOnline === 'true') {
+            shouldSkipAI = true;
+            logger.info('Skipping AI: Admin is online');
+          }
+        } catch (redisErr) {
+          logger.warn('Redis check failed, proceeding with AI', { error: redisErr });
         }
-      } catch (autoReplyError) {
-        logger.warn('Auto-reply failed', { targetUserId, error: autoReplyError });
+
+        if (!shouldSkipAI) {
+          autoReplyMessage = await Promise.race([
+            generateAutoReply(sanitizedMessage, targetUserId),
+            new Promise<null>((_, reject) => setTimeout(() => reject(new Error('AI Timeout')), 10000))
+          ]).catch(err => {
+            logger.warn('AI Generation failed', { error: err.message });
+            return null;
+          });
+
+          if (autoReplyMessage) {
+            await createChat({
+              userId: targetUserId,
+              adminId: null,
+              message: `🤖 ${autoReplyMessage}`,
+              isAdmin: true
+            }).catch(e => logger.error('Failed to save AI reply', e));
+          }
+        }
+      } catch (autoReplyError: any) {
+        logger.error('Auto-reply logic failed unexpectedly', { error: autoReplyError.message });
       }
     }
 
@@ -180,19 +223,15 @@ export async function POST(request: NextRequest) {
         userId: targetUserId,
         adminId: targetAdminId,
         message: sanitizedMessage,
-        isAdmin,
+        isAdmin: isActingAsAdmin,
+        is_admin: isActingAsAdmin,
         createdAt: result.createdAt
       },
-      autoReply: autoReplyMessage
-        ? {
-          message: autoReplyMessage,
-          senderType: 'ai',
-        }
-        : null,
+      autoReply: autoReplyMessage ? { message: autoReplyMessage, senderType: 'ai' } : null,
     });
 
   } catch (error: any) {
-    logger.error('Chat POST error', error);
+    logger.error('Chat POST error', { message: error.message, stack: error.stack });
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
@@ -233,14 +272,41 @@ export async function GET(request: NextRequest) {
       [currentUserId]
     );
     const isAdmin = adminCheck.length > 0 || authUser.role === 'admin';
+    
+    // ✅ FIX: NEW - Update Admin "Online" heartbeat in Redis
+    if (isAdmin) {
+      try {
+        const { Redis } = await import('@upstash/redis');
+        const redis = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL!,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN!
+        });
+        // Đánh dấu admin online trong 60 giây (mỗi lần poll 2-3s sẽ reset liên tục)
+        await redis.set('admin_online_flag', 'true', { ex: 60 });
+      } catch (e) {
+        // Bỏ qua lỗi redis khi track heartbeat
+      }
+    }
 
     // Get chats với pagination ở database level
     let chats;
     if (isAdmin) {
       if (userIdParam) {
-        chats = await getChats(parseInt(userIdParam), currentUserId, limit, offset);
+        const targetId = parseInt(userIdParam);
+        // ✅ FIX: Admin xem chat của một user thì lấy TOÀN BỘ tin nhắn của user đó (kể cả chưa gán admin)
+        chats = await getChats(targetId, undefined, limit, offset);
+        
+        // Cập nhật trạng thái đã đọc cho admin
+        try {
+          const { markMessagesAsRead } = await import('@/lib/db/admin');
+          await markMessagesAsRead(targetId);
+        } catch (e) {
+          logger.warn('Failed to mark messages as read', { userId: targetId, error: e });
+        }
       } else {
-        chats = await getChats(undefined, currentUserId, limit, offset);
+        // ✅ FIX: Admin khi load danh sách tổng thì lấy TOÀN BỘ tin nhắn (để biết có khách mới cần hỗ trợ)
+        // Không lọc theo admin_id của người đang đăng nhập
+        chats = await getChats(undefined, undefined, limit, offset);
       }
     } else {
       chats = await getChats(currentUserId, undefined, limit, offset);
@@ -294,7 +360,7 @@ async function generateAutoReply(userMessage: string, userId: number): Promise<s
 
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     let chatHistory = '';
     try {

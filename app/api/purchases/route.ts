@@ -55,21 +55,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ✅ SECURITY FIX: Nếu không phải admin, bắt buộc phải lọc theo userId của chính người dùng đó
-    let dbUserId: number | undefined = undefined
+    // ✅ SECURITY FIX: Nếu không có admin, bắt buộc lọc theo userId của chính user đó qua thư viện
+    let dbUserId: number | undefined = undefined;
     if (isAdmin) {
-      // Admin có thể xem tất cả hoặc xem theo userId cụ thể nếu có param
       if (userId) {
         if (!isNaN(parseInt(userId))) {
-          dbUserId = parseInt(userId)
+          dbUserId = parseInt(userId);
         } else {
-          dbUserId = await getUserIdByEmail(userId) || undefined // Thử search theo email nếu userId là string email
+          // Admin search by email fallback
+          const { getUserIdByEmail } = await import('@/lib/database');
+          dbUserId = await getUserIdByEmail(userId) || undefined;
         }
       }
     } else if (authUser) {
-      // User thường chỉ được xem của chính mình. 
-      // Luôn lấy DB ID từ email của chính token đó để đảm bảo an toàn (IDOR protection)
-      dbUserId = await getUserIdByEmail(authUser.email || "") || undefined
+      // ✅ CRITICAL SECURITY: Luôn tìm DB ID từ Firebase UID để ngăn chặn IDOR/Email out-of-sync
+      const { queryOne } = await import('@/lib/database');
+      const userRecord = await queryOne<{ id: number }>('SELECT id FROM users WHERE uid = $1', [authUser.uid]);
+      if (userRecord?.id) {
+         dbUserId = userRecord.id;
+      } else {
+         // Fallback to email ONLY if uid mapping not found (e.g. legacy user)
+         const { getUserIdByEmail } = await import('@/lib/database');
+         dbUserId = await getUserIdByEmail(authUser.email || '') || undefined;
+      }
       
       if (!dbUserId) {
         return NextResponse.json({ success: false, error: 'User profile not found' }, { status: 404 });
@@ -157,19 +165,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ✅ FIX: Normalize userId - nếu là string (uid), dùng email để tìm DB ID
-    const dbUserId = await normalizeUserId(
-      purchaseData.userId || authUser.uid,
-      authUser.email || undefined,
-    )
+    // ✅ FIX: Normalize userId - nếu là string (uid), dùng query DB ID trực tiếp từ UID để chống IDOR
+    let dbUserIdNum: number | undefined;
+    
+    if (authUser.uid) {
+       const { queryOne } = await import('@/lib/database');
+       const userRecord = await queryOne<{ id: number }>('SELECT id FROM users WHERE uid = $1', [authUser.uid]);
+       if (userRecord?.id) {
+           dbUserIdNum = userRecord.id;
+       }
+    }
+    
+    // Fallback: Nếu không tìm thấy bằng UID, thì dùng email để tìm DB ID (dành cho legacy data)
+    if (!dbUserIdNum) {
+       dbUserIdNum = await normalizeUserId(
+         purchaseData.userId || authUser.uid,
+         authUser.email || undefined,
+       ) as number | undefined;
+    }
 
-    if (!dbUserId) {
+    if (!dbUserIdNum) {
       return NextResponse.json({
         success: false,
         error: 'Cannot resolve user ID. User may not exist in database.'
       }, { status: 400 });
     }
-    const dbUserIdNum = Number(dbUserId);
 
     // ✅ FIX: Remove duplicate check trước transaction - rely on database constraint và check trong transaction
     // createPurchase đã có check duplicate trong transaction với row locking, đảm bảo atomicity

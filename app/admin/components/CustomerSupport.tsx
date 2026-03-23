@@ -171,7 +171,7 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
       logger.error('Error sending message', error)
     }
 
-    // Telegram notification (fire-and-forget)
+    /* ✅ DISABLED: Telegram notification (fire-and-forget)
     try {
       const user = findUser(activeChat)
       const { apiPost } = await import('@/lib/api-client');
@@ -183,7 +183,7 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
       });
     } catch (e) {
       logger.debug('Telegram notification wrapper failed', { error: e instanceof Error ? e.message : String(e) });
-    }
+    } */
 
     setSending(false)
   }
@@ -209,14 +209,14 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
   const activeUser = findUser(activeChat)
 
   return (
-    <div className="flex h-[calc(100vh-180px)] rounded-xl overflow-hidden border border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
+    <div className="flex h-[calc(100vh-180px)] rounded-xl overflow-hidden border border-border dark:bg-slate-900/50 bg-background/50 backdrop-blur-sm">
 
       {/* ═══════════════ LEFT PANEL: Users List ═══════════════ */}
-      <div className={`w-80 border-r border-slate-700/50 flex flex-col bg-slate-900/80 ${activeChat ? 'hidden lg:flex' : 'flex'}`}>
+      <div className={`w-80 border-r border-border flex flex-col dark:bg-slate-900/80 bg-card/80 ${activeChat ? 'hidden lg:flex' : 'flex'}`}>
 
         {/* Header */}
-        <div className="p-4 border-b border-slate-700/50">
-          <h3 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+        <div className="p-4 border-b border-border">
+          <h3 className="text-base font-bold text-foreground dark:text-white mb-3 flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-purple-400" />
             Khách hàng
             <Badge className="bg-purple-500/20 text-purple-300 text-[10px] ml-auto">
@@ -224,12 +224,12 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
             </Badge>
           </h3>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Tìm kiếm..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 h-9 text-sm rounded-lg"
+              className="pl-9 dark:bg-slate-800/50 bg-muted/50 border-border dark:text-white text-foreground placeholder:text-muted-foreground h-9 text-sm rounded-lg"
             />
           </div>
         </div>
@@ -237,14 +237,14 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
         {/* Users List */}
         <div className="flex-1 overflow-y-auto">
           {fetchingUsers && localUsers.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mb-3" />
               <p className="text-sm">Đang tải danh sách...</p>
             </div>
           )}
 
           {!fetchingUsers && chatUsers.length === 0 && (
-            <div className="p-8 text-center text-slate-500 text-sm">
+            <div className="p-8 text-center text-muted-foreground text-sm">
               {debouncedSearchTerm ? 'Không tìm thấy khách hàng' : 'Chưa có khách hàng nào'}
             </div>
           )}
@@ -258,10 +258,10 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
               <div
                 key={userKey}
                 onClick={() => loadChatMessages(userKey)}
-                className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all border-b border-slate-800/50
+                className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all border-b border-border/50
                   ${isActive
                     ? 'bg-purple-500/15 border-l-2 border-l-purple-500'
-                    : 'hover:bg-slate-800/50 border-l-2 border-l-transparent'
+                    : 'hover:dark:bg-slate-800/50 hover:bg-muted/50 border-l-2 border-l-transparent'
                   }`}
               >
                 {/* Avatar */}
@@ -277,10 +277,10 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">
+                  <p className="text-sm font-medium text-foreground dark:text-white truncate">
                     {user.name || user.username || 'Unknown'}
                   </p>
-                  <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
                 </div>
 
                 {/* Online indicator */}
@@ -299,11 +299,11 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
         {activeChat && activeUser ? (
           <>
             {/* Chat Header */}
-            <div className="px-4 py-3 border-b border-slate-700/50 flex items-center gap-3 bg-slate-900/80">
+            <div className="px-4 py-3 border-b border-border flex items-center gap-3 dark:bg-slate-900/80 bg-card/80">
               {/* Back button mobile */}
               <button
                 onClick={() => setActiveChat(null)}
-                className="lg:hidden text-slate-400 hover:text-white"
+                className="lg:hidden text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -314,10 +314,10 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
               </div>
 
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate">
+                <p className="text-sm font-semibold text-foreground dark:text-white truncate">
                   {activeUser.name || activeUser.username || activeUser.email}
                 </p>
-                <p className="text-[11px] text-slate-400">{activeUser.email}</p>
+                <p className="text-[11px] text-muted-foreground">{activeUser.email}</p>
               </div>
 
               <Button
@@ -331,7 +331,7 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
             </div>
 
             {/* Messages Area */}
-            <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 space-y-3" style={{ background: 'linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(30,41,59,0.95) 100%)' }}>
+            <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 space-y-3 dark:bg-slate-950/50 bg-slate-50/50">
               {loading && (
                 <div className="flex justify-center py-8">
                   <RefreshCw className="w-5 h-5 text-purple-400 animate-spin" />
@@ -339,7 +339,7 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
               )}
 
               {!loading && messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                   <MessageSquare className="w-10 h-10 mb-3 opacity-30" />
                   <p className="text-sm">Chưa có tin nhắn</p>
                 </div>
@@ -364,7 +364,7 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
 
                     <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[70%]`}>
                       {/* Sender label */}
-                      <span className="text-[10px] text-slate-500 mb-0.5 px-1">
+                      <span className="text-[10px] text-muted-foreground mb-0.5 px-1">
                         {isMe ? 'Bạn' : sType === 'ai' ? '✦ AI' : (msg.senderName || activeUser?.name || 'Khách')}
                       </span>
 
@@ -374,7 +374,7 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
                           ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-md shadow-lg shadow-purple-500/10'
                           : sType === 'ai'
                             ? 'bg-emerald-500/15 text-emerald-100 border border-emerald-500/20 rounded-bl-md'
-                            : 'bg-slate-800 text-slate-100 border border-slate-700/50 rounded-bl-md'
+                            : 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700/50 rounded-bl-md'
                         }`}>
                         <p className="whitespace-pre-wrap break-words">{content}</p>
                       </div>
@@ -398,7 +398,7 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
             </div>
 
             {/* Input Area */}
-            <div className="p-3 border-t border-slate-700/50 bg-slate-900/80">
+            <div className="p-3 border-t border-slate-700/50 dark:bg-slate-900/80 bg-card/80">
               <div className="flex gap-2">
                 <Textarea
                   value={newMessage}
@@ -411,7 +411,7 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
                       sendMessage()
                     }
                   }}
-                  className="flex-1 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 min-h-10 max-h-32 rounded-xl text-sm resize-none"
+                  className="flex-1 dark:bg-slate-800/50 bg-muted/50 border-border dark:text-white text-foreground placeholder:text-muted-foreground min-h-10 max-h-32 rounded-xl text-sm resize-none"
                 />
                 <Button
                   onClick={sendMessage}
@@ -428,12 +428,12 @@ export function CustomerSupport({ users: propUsers, adminUser }: CustomerSupport
           </>
         ) : (
           /* Empty State */
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
-            <div className="w-20 h-20 rounded-2xl bg-slate-800/50 flex items-center justify-center mb-4">
-              <MessageSquare className="w-8 h-8 text-slate-600" />
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+            <div className="w-20 h-20 rounded-2xl dark:bg-slate-800/50 bg-muted/50 flex items-center justify-center mb-4">
+              <MessageSquare className="w-8 h-8 text-muted-foreground" />
             </div>
-            <p className="text-base font-medium text-slate-400 mb-1">Chọn khách hàng</p>
-            <p className="text-sm text-slate-600">để bắt đầu cuộc trò chuyện</p>
+            <p className="text-base font-medium text-muted-foreground mb-1">Chọn khách hàng</p>
+            <p className="text-sm text-muted-foreground">để bắt đầu cuộc trò chuyện</p>
           </div>
         )}
       </div>

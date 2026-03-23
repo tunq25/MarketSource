@@ -7,13 +7,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Star, Trash } from "lucide-react"
 
 interface AdminReview {
-  id: string
+  id: string | number
   productTitle: string
   userEmail: string
+  userName?: string
   rating: number
   comment: string
   status: "pending" | "published" | "rejected"
   createdAt: string
+  admin_response?: string
 }
 
 interface ReviewManagementProps {
@@ -46,8 +48,9 @@ export function ReviewManagement({ reviews, onApprove, onReject, onDelete, onRes
                   variant={
                     review.status === "published" ? "secondary" : review.status === "pending" ? "outline" : "destructive"
                   }
+                  className={review.status === "published" ? "bg-green-500/10 text-green-500 hover:bg-green-500/20 border-green-500/20" : ""}
                 >
-                  {review.status}
+                  {review.status === "published" ? "Đã duyệt" : review.status === "pending" ? "Chờ duyệt" : "Bị từ chối"}
                 </Badge>
               </div>
 
@@ -57,29 +60,43 @@ export function ReviewManagement({ reviews, onApprove, onReject, onDelete, onRes
                 ))}
               </div>
 
-              <p className="text-sm text-muted-foreground">{review.comment}</p>
+              <p className="text-sm text-slate-700 dark:text-slate-300">{review.comment}</p>
+              
+              {review.admin_response && (
+                <div className="bg-muted/50 p-2 rounded text-xs border-l-2 border-primary">
+                  <p className="font-semibold mb-1">Phản hồi của Admin:</p>
+                  <p>{review.admin_response}</p>
+                </div>
+              )}
+
               <p className="text-xs text-muted-foreground">
                 {new Date(review.createdAt).toLocaleString("vi-VN")}
               </p>
 
-              <Textarea
-                placeholder="Gửi phản hồi cho người dùng..."
-                rows={2}
-                onBlur={(e) => e.target.value && onRespond(review.id, e.target.value)}
-              />
+              <div className="flex flex-col gap-2">
+                <Textarea
+                  placeholder="Gửi phản hồi cho người dùng..."
+                  className="text-xs min-h-[60px]"
+                  onBlur={(e) => {
+                    if (e.target.value) {
+                      onRespond(String(review.id), e.target.value);
+                    }
+                  }}
+                />
+              </div>
 
               <div className="flex flex-wrap gap-2">
                 {review.status === "pending" && (
                   <>
-                    <Button size="sm" onClick={() => onApprove(review.id)}>
+                    <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => onApprove(String(review.id))}>
                       Duyệt
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => onReject(review.id, "Không phù hợp")}>
+                    <Button size="sm" variant="outline" onClick={() => onReject(String(review.id), "Nội dung không phù hợp")}>
                       Từ chối
                     </Button>
                   </>
                 )}
-                <Button size="sm" variant="ghost" className="text-red-500" onClick={() => onDelete(review.id)}>
+                <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => onDelete(String(review.id))}>
                   <Trash className="w-4 h-4 mr-1" />
                   Xóa
                 </Button>

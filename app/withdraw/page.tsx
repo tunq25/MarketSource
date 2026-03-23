@@ -442,7 +442,7 @@ export default function WithdrawPage() {
           <StepIndicator step={3} currentStep={currentStep} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 max-w-7xl mx-auto">
           {/* ========== LEFT: FORM ========== */}
           <div className="lg:col-span-3 space-y-6">
             <form onSubmit={handleSubmit} className="space-y-6">

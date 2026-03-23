@@ -126,6 +126,7 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0);
     
     const filters: any = {
+      status: 'published',
       limit,
       offset,
     };

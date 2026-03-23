@@ -29,7 +29,7 @@ export function Footer() {
   return (
     <footer className="border-t border-slate-200/90 bg-slate-50/95 dark:border-slate-700/80 dark:bg-slate-950/95">
       {/* Khoảng đệm phía dưới: tránh nội dung bị che bởi bottom nav (mobile) + safe area */}
-      <div className="container mx-auto max-w-6xl px-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] pt-10 md:px-6 md:pb-14 lg:px-8 lg:pb-16">
+      <div className="container mx-auto max-w-7xl px-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] pt-10 md:px-6 md:pb-14 lg:px-8 lg:pb-16">
         {/* Cột 1: thương hiệu — full width mobile */}
         <div className="mb-10 flex flex-col items-center text-center md:mb-12 md:items-start md:text-left">
           <div className="mb-4 flex justify-center md:justify-start">

@@ -996,3 +996,81 @@ export async function sendWithdrawalRejectionEmail(email: string, amount: number
     html: htmlTemplate,
   });
 }
+
+export async function sendReviewThankYouEmail(email: string, productName: string) {
+  const siteName = 'QTUS Dev Market';
+  const siteUrl = process.env.NEXT_PUBLIC_URL || 'https://market-source.vercel.app';
+
+  const htmlTemplate = `
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cám ơn bạn đã đánh giá</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f7f9; font-family: 'Inter', system-ui, -apple-system, sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f7f9; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+          <!-- Header Accent -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); height: 8px;"></td>
+          </tr>
+          <!-- Content Body -->
+          <tr>
+            <td style="padding: 40px;">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <div style="background-color: #f5f3ff; display: inline-block; padding: 16px; border-radius: 50%; margin-bottom: 16px;">
+                  <span style="font-size: 32px;">🌟</span>
+                </div>
+                <h2 style="color: #1e293b; font-size: 24px; font-weight: 800; margin: 0;">Cám ơn bạn đã đánh giá!</h2>
+              </div>
+              
+              <p style="color: #475569; font-size: 16px; line-height: 1.8; margin: 0 0 24px 0;">
+                Chào bạn, đánh giá của bạn cho sản phẩm <strong style="color: #6366f1;">${productName}</strong> . Chúng tôi sẽ cố gắng mang đến cho bạn những trải nghiệm và sản phẩm tuyệt vời nhất. cám ơn bạn và chúc bạn 1 ngày thật tốt lành.
+              </p>
+              
+              <p style="color: #475569; font-size: 16px; line-height: 1.8; margin: 0 0 24px 0;">
+                Những đóng góp của bạn rất quan trọng, giúp cộng đồng người dùng có cái nhìn khách quan hơn về sản phẩm. 
+                Chúng tôi rất trân trọng sự tin tưởng và thời gian bạn dành cho QtusDev Market.
+              </p>
+
+              <div style="text-align: center; margin-top: 32px; margin-bottom: 32px;">
+                <a href="${siteUrl}/dashboard" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);">
+                  Vào Dashboard của bạn
+                </a>
+              </div>
+
+              <p style="color: #64748b; font-size: 14px; line-height: 1.6; border-top: 1px solid #f1f5f9; padding-top: 24px; margin: 0;">
+                Hy vọng bạn sẽ tiếp tục có những trải nghiệm tuyệt vời cùng chúng tôi.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8faff; padding: 30px 40px; text-align: center; border-top: 1px solid #f0f0f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                © ${new Date().getFullYear()} ${siteName}. All rights reserved.
+              </p>
+              <p style="color: #cbd5e1; font-size: 11px; margin-top: 8px;">
+                Đây là email tự động, vui lòng không trả lời.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `[${siteName}] Cám ơn bạn đã để lại đánh giá`,
+    html: htmlTemplate,
+  });
+}
+

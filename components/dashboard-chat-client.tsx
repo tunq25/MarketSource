@@ -138,24 +138,33 @@ export function DashboardChatClient({ currentUser }: { currentUser: UserType | n
         if (!msg || isLoading || !currentUser) return
 
         setIsLoading(true)
-        setIsTyping(true)
+        // ✅ FIX #1: Optimistic Update - Hiển thị tin nhắn của khách ngay lập tức
         const localMsg = msg
+        const optimisticId = Date.now()
+        const newMessage: Message = {
+            id: optimisticId,
+            message: localMsg,
+            isAdmin: false,
+            createdAt: new Date().toISOString(),
+            senderName: currentUser.name || currentUser.email || "Bạn",
+            senderType: "user",
+        }
+        setMessages((prev) => [...prev, newMessage])
         setMessageText("")
 
         try {
+            // ✅ FIX #2: Gửi API (Hợp nhất AI timeout từ phía server đã sửa trước đó)
             const result = await apiPost("/api/chat", { message: localMsg })
 
-            const newMessage: Message = {
-                id: result.message?.id || Date.now(),
-                message: localMsg,
-                isAdmin: false,
-                createdAt: result.message?.createdAt || new Date().toISOString(),
-                senderName: currentUser.name || currentUser.email || "Bạn",
-                senderType: "user",
+            // Cập nhật lại ID thật từ database nếu cần (hoặc giữ nguyên để tránh jitter)
+            if (result.success && result.message?.id) {
+                setMessages((prev) => 
+                    prev.map(m => m.id === optimisticId ? { ...m, id: result.message.id } : m)
+                )
             }
-            setMessages((prev) => [...prev, newMessage])
 
             if (result.autoReply?.message) {
+                setIsTyping(true)
                 setTimeout(() => {
                     setMessages((prev) => [
                         ...prev,
@@ -171,13 +180,14 @@ export function DashboardChatClient({ currentUser }: { currentUser: UserType | n
                     setIsTyping(false)
                 }, 800)
             } else {
-                setTimeout(() => {
-                    loadChatHistory()
-                    setIsTyping(false)
-                }, 2000)
+                // Nếu không có AI reply ngay, tắt typing và đợi Admin hoặc polling
+                setIsTyping(false)
+                setTimeout(() => loadChatHistory(), 2000)
             }
         } catch (error: any) {
             logger.error("Error sending message:", error)
+            // Error handling: Xóa tin nhắn optimistic nếu gửi lỗi? 
+            // Tạm thời giữ lại để user có thể copy/thử lại, nhưng báo lỗi
             setIsTyping(false)
         } finally {
             setIsLoading(false)

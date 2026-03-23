@@ -98,6 +98,8 @@ export async function middleware(request: NextRequest) {
     // /api/admin/* yêu cầu CSRF ở middleware; handler requireAdmin vẫn kiểm tra thêm khi cần.
     const csrfExempt = [
       '/api/auth/',
+      '/api/login',
+      '/api/register',
       '/api/telegram-webhook',
       '/api/health',
       '/api/csrf',

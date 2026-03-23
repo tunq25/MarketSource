@@ -254,6 +254,8 @@ model Review {
   comment      String?   @db.Text
   images       String[]  // array of image URLs
   helpfulCount Int       @default(0) @map("helpful_count")
+  status        String    @default("pending") // 'pending' | 'published' | 'rejected'
+  adminResponse String?   @map("admin_response") @db.Text
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
@@ -311,6 +313,7 @@ model Chat {
   adminId   Int?      @map("admin_id")
   message   String    @db.Text
   isAdmin   Boolean   @default(false) @map("is_admin")
+  isRead    Boolean   @default(false) @map("is_read")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")

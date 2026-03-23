@@ -309,7 +309,7 @@ export default function ProductsPage() {
 
       <FloatingHeader />
 
-      <main className="container mx-auto px-3 sm:px-4 pt-24 pb-12 relative z-10">
+      <main className="container mx-auto max-w-7xl px-3 sm:px-4 pt-24 pb-12 relative z-10">
         <div className="mb-6 sm:mb-8 animate-fade-in-down">
           <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-4">
             Mã nguồn{" "}

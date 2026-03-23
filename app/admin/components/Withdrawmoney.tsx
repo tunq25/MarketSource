@@ -94,15 +94,15 @@ export function Withdrawmoney({
                       <p className="text-sm text-muted-foreground mb-3">{withdrawal.userEmail}</p>
 
                       {/* Enhanced User Balance Info */}
-                      <div className="mb-3 p-2 bg-red-100 dark:bg-red-900 rounded border-l-4 border-red-500 shadow-inner">
-                        <p className="text-xs text-blue-600">
+                      <div className="mb-3 p-3 bg-red-50 dark:bg-red-950/30 rounded border-l-4 border-red-500 shadow-sm">
+                        <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
                           💰 Số dư hiện tại: {Number(withdrawal.userBalance || 0).toLocaleString('vi-VN')}đ
                         </p>
-                        <p className="text-xs text-red-600">
+                        <p className="text-xs font-medium text-red-600 dark:text-red-400 mt-1">
                           ➖ Sau rút: {Math.max(0, Number(withdrawal.userBalance || 0) - Number(withdrawal.amount || 0)).toLocaleString('vi-VN')}đ
                         </p>
                         {Number(withdrawal.userBalance || 0) < Number(withdrawal.amount || 0) && (
-                          <p className="text-xs text-red-800 font-semibold bg-red-100 dark:bg-red-800 p-1 rounded mt-1">
+                          <p className="text-xs text-red-700 dark:text-red-200 font-bold bg-red-100 dark:bg-red-900/50 p-1.5 rounded mt-2 border border-red-200 dark:border-red-800">
                             ⚠️ KHÔNG ĐỦ SỐ DƯ!
                           </p>
                         )}
@@ -118,10 +118,10 @@ export function Withdrawmoney({
                         <p className="text-sm">
                           <strong>👤 Tên TK:</strong> {withdrawal.account_name || withdrawal.accountName || withdrawal.bankInfo?.accountName || 'N/A'}
                         </p>
-                        <p className="text-xs text-blue-600">
+                        <p className="text-xs text-blue-700 dark:text-blue-400">
                           🌐 IP: {withdrawal.ipAddress || withdrawal.ip_address || 'Unknown'}
                         </p>
-                        <p className="text-xs text-blue-600">
+                        <p className="text-xs text-blue-700 dark:text-blue-400">
                           📱 Thiết bị: {withdrawal.deviceInfo?.deviceType || withdrawal.device_info?.deviceType || 'Unknown'} ({withdrawal.deviceInfo?.browser || withdrawal.device_info?.browser || 'Unknown'})
                         </p>
                       </div>

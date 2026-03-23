@@ -147,9 +147,11 @@ export async function PUT(request: NextRequest) {
             if (typeof key === 'string' && value !== undefined) {
                 const valStr = typeof value === 'string' ? value : JSON.stringify(value)
                 
-                // ✅ UX FIX: Nếu là key nhạy cảm và value là rỗng, bỏ qua (không ghi đè để tránh mất config cũ)
-                if (sensitiveKeys.includes(key) && valStr.trim() === '') {
-                    continue
+                // ✅ SECURITY FIX: KHÔNG lưu các key nhạy cảm vào Database. 
+                // Yêu cầu quản trị viên cấu hình qua Environment Variables (.env)
+                if (sensitiveKeys.includes(key)) {
+                    logger.warn(`Bỏ qua lưu cấu hình nhạy cảm vào database: ${key}. Vui lòng dùng biến môi trường (Environment Variables) để bảo mật.`);
+                    continue;
                 }
 
                 await query(

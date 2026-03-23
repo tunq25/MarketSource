@@ -38,8 +38,24 @@ export function ChatAdmin() {
   const [isLoading, setIsLoading] = useState(false)
   const [chatUsers, setChatUsers] = useState<ChatUser[]>([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [totalUnread, setTotalUnread] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const lastMessageCountRef = useRef(0)
+
+  // ✅ Cập nhật tổng số tin nhắn chưa đọc
+  useEffect(() => {
+    const unread = chatUsers.reduce((acc, user) => acc + user.unreadCount, 0)
+    setTotalUnread(unread)
+    
+    // ✅ Sound notification logic
+    const totalMsgs = chatUsers.reduce((acc, user) => acc + (user.lastMessage ? 1 : 0), 0)
+    if (totalMsgs > lastMessageCountRef.current && unread > 0) {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3')
+      audio.play().catch(() => {}) // Ignore if browser blocks auto-play
+    }
+    lastMessageCountRef.current = totalMsgs
+  }, [chatUsers])
 
   const loadChatUsers = useCallback(async () => {
     try {
@@ -94,12 +110,8 @@ export function ChatAdmin() {
           user.lastMessageTime = msg.created_at || msg.createdAt || msg.timestamp
         }
 
-        if (!msg.is_admin && !msg.isAdmin) {
-          const lastSeenKey = `lastSeen_${userId}`
-          const lastSeen = localStorage.getItem(lastSeenKey)
-          if (!lastSeen || msgTime > parseInt(lastSeen)) {
-            user.unreadCount++
-          }
+        if (!msg.is_admin && !msg.isAdmin && !msg.is_read) {
+          user.unreadCount++
         }
       })
 
@@ -145,18 +157,21 @@ export function ChatAdmin() {
     pollingIntervalRef.current = setInterval(() => {
       loadChatUsers()
       if (selectedUserId) loadChatMessages(selectedUserId)
-    }, 3000)
+    }, 2000) // ✅ 2s polling for real-time feel
 
     return () => { if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current) }
   }, [selectedUserId, loadChatUsers, loadChatMessages])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    if (messages.length > 0) {
+      // ✅ FIX: Cuộn một cách tinh tế, chỉ cuộn trong container local của ScrollArea
+      // Sử dụng behavior: "auto" và block: "nearest" để trình duyệt không cuộn cả trang Body
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "nearest" })
+    }
   }, [messages])
 
   const handleSelectUser = (userId: number) => {
     setSelectedUserId(userId)
-    localStorage.setItem(`lastSeen_${userId}`, Date.now().toString())
     loadChatMessages(userId)
     setChatUsers(prev => prev.map(u => u.userId === userId ? { ...u, unreadCount: 0 } : u))
   }
@@ -187,7 +202,8 @@ export function ChatAdmin() {
   const selectedUser = chatUsers.find(u => u.userId === selectedUserId)
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-250px)] min-h-[600px]">
+    /* ✅ FIX: Đảm bảo h-calc khớp với không gian trống của dashboard admin */
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-280px)] min-h-[500px] overflow-hidden">
       {/* Users List - 4 columns */}
       <Card className="lg:col-span-4 border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden glass-panel flex flex-col">
         <CardHeader className="p-4 border-b border-white/5 bg-slate-50/50 dark:bg-slate-900/50">
@@ -196,8 +212,8 @@ export function ChatAdmin() {
               <UserCog className="w-5 h-5 text-blue-500" />
               <span>Khách hàng</span>
             </div>
-            <Badge variant="secondary" className="bg-blue-500/10 text-blue-500 border-none">
-              {chatUsers.length}
+            <Badge variant="secondary" className={totalUnread > 0 ? "bg-red-500 text-white" : "bg-blue-500/10 text-blue-500 border-none"}>
+              {totalUnread > 0 ? `Chưa đọc: ${totalUnread}` : `${chatUsers.length} khách`}
             </Badge>
           </CardTitle>
           <div className="relative mt-4">

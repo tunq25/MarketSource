@@ -168,13 +168,6 @@ export function DebugInfo() {
           </div>
         </div>
 
-        {/* Raw Data */}
-        <details className="mt-4">
-          <summary className="cursor-pointer text-sm font-medium">Raw Data (Click to expand)</summary>
-          <pre className="mt-2 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs overflow-auto max-h-96">
-            {JSON.stringify(debugData, null, 2)}
-          </pre>
-        </details>
       </CardContent>
     </Card>
   )

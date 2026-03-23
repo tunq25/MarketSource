@@ -118,7 +118,7 @@ export function FloatingHeader() {
       <header
         className={cn(
           'hidden md:flex fixed top-[max(1rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50',
-          'w-full max-w-[1200px] mx-auto px-4',
+          'w-full max-w-7xl mx-auto px-4',
           'transition-all duration-300 ease-out'
         )}
       >

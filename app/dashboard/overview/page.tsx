@@ -12,8 +12,9 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User as UserIcon, Wallet, ShoppingBag, Download, CreditCard, TrendingUp, Calendar, Mail, Phone, MapPin, Eye, ExternalLink, LogOut, Settings, Bell, Star, Clock, DollarSign, Package, Star as StarIcon, Lock, Filter, Search, MessageSquare, ShieldCheck, KeyRound, ListChecks, Share2, Activity, Heart, Camera, Smartphone } from "lucide-react"
+import { User as UserIcon, Wallet, ShoppingBag, Download, CreditCard, TrendingUp, Calendar, Mail, Phone, MapPin, Eye, ExternalLink, LogOut, Settings, Bell, Star, Clock, DollarSign, Package, Star as StarIcon, Lock, Filter, Search, MessageSquare, ShieldCheck, KeyRound, ListChecks, Share2, Activity, Heart, Camera, Smartphone, ChevronDown } from "lucide-react"
 import { NotificationCenter } from "../components/NotificationCenter"
+import { OverviewNotifications } from "../components/OverviewNotifications"
 import { SpendingChart } from "../components/SpendingChart"
 import { DownloadHistory } from "../components/DownloadHistory"
 import { PersonalAnalytics } from "../components/PersonalAnalytics"
@@ -29,7 +30,6 @@ import { FloatingHeader } from "@/components/floating-header"
 import { Footer } from "@/components/footer"
 import dynamic from "next/dynamic"
 import { ThreeDFallback } from "@/components/3d-fallback"
-import { DebugInfo } from "@/components/DebugInfo"
 import { DashboardChatClient } from "@/components/dashboard-chat-client"
 
 // Lazy load Three.js components để tránh lỗi ReactCurrentOwner
@@ -97,9 +97,9 @@ function mapPurchaseApiRowToItem(p: Record<string, unknown>, localPurchases: any
     isFeatured: false,
     created_at: created,
     updated_at: created,
-    downloadCount: 0,
-    averageRating: 0,
-    totalRatings: 0,
+    downloadCount: Number(p.downloads || p.downloadCount || p.download_count || 0),
+    averageRating: Number(p.rating || p.averageRating || p.average_rating || 0),
+    totalRatings: Number(p.totalRatings || p.total_ratings || 0),
   }
   return {
     id: id as Purchase["id"],
@@ -119,9 +119,9 @@ function mapPurchaseApiRowToItem(p: Record<string, unknown>, localPurchases: any
     demoUrl: productDemoUrl ?? null,
     demoLink: productDemoUrl ?? null,
     product: productMini,
-    downloads: localP.downloads || 0,
-    rating: localP.rating || 0,
-    reviewCount: localP.reviewCount || 0,
+    downloads: Number(p.downloads || p.downloadCount || p.download_count || localP.downloads || 0),
+    rating: Number(p.rating || p.averageRating || p.average_rating || localP.rating || 0),
+    reviewCount: Number(p.reviewCount || p.totalRatings || p.total_ratings || localP.reviewCount || 0),
   }
 }
 
@@ -186,6 +186,10 @@ export default function DashboardPage() {
   const [purchaseCategoryFilter, setPurchaseCategoryFilter] = useState("all")
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [activityFilter, setActivityFilter] = useState("all")
+  const [activityPage, setActivityPage] = useState(1)
+  const [overviewActivityPage, setOverviewActivityPage] = useState(1)
+  const activityPageSize = 3
+  const overviewActivityPageSize = 3
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([])
   const [ticketForm, setTicketForm] = useState({
     subject: "",
@@ -372,7 +376,7 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [router, userIP, deviceInfo]);
+  }, [router]);
 
   // ✅ NEW: Lưu tham chiếu đến loadUser để dùng trong event listener
   const loadUserRef = useRef(loadUser);
@@ -1569,7 +1573,7 @@ export default function DashboardPage() {
       window.removeEventListener('focus', handleFocus);
       abortController.abort();
     }
-  }, [currentUser?.email]) // ✅ Chỉ depend on email, không phải toàn bộ currentUser object
+  }, [currentUser?.email, currentUser?.id]) // ✅ Added currentUser?.id to satisfy ESLint
 
   const handleLogout = () => {
     logger.info('User logout initiated')
@@ -1670,6 +1674,19 @@ export default function DashboardPage() {
     }
   }
 
+  // Logic phân trang cho Hoạt động gần đây
+  const paginatedActivity = useMemo(() => {
+    const startIndex = (activityPage - 1) * activityPageSize
+    return filteredActivity.slice(startIndex, startIndex + activityPageSize)
+  }, [filteredActivity, activityPage])
+
+  const totalActivityPages = Math.ceil(filteredActivity.length / activityPageSize)
+
+  // Reset về trang 1 khi đổi bộ lọc
+  useEffect(() => {
+    setActivityPage(1)
+  }, [activityFilter])
+
   const exportActivityLog = () => {
     const payload = JSON.stringify(activityFeed, null, 2)
     const blob = new Blob([payload], { type: "application/json" })
@@ -1762,10 +1779,8 @@ export default function DashboardPage() {
 
       <FloatingHeader />
 
-      <main className="container mx-auto px-3 pt-[calc(5.5rem+env(safe-area-inset-top,0px))] pb-10 sm:px-4 sm:pt-24 sm:pb-8 relative z-10">
-        <div className="max-w-7xl mx-auto">
+      <main className="container mx-auto max-w-7xl px-3 pt-[calc(5.5rem+env(safe-area-inset-top,0px))] pb-10 sm:px-4 sm:pt-24 sm:pb-8 relative z-10">
           {/* Debug Info - Only show in development */}
-          {process.env.NODE_ENV === 'development' && <DebugInfo />}
 
           {/* Header */}
           <div className="mb-8 flex flex-col gap-4 animate-fade-in-down sm:flex-row sm:items-center sm:justify-between">
@@ -1788,7 +1803,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-2 lg:grid-cols-5 mb-8 animate-fade-in-up">
+          <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-5 mb-8 animate-fade-in-up">
             <Card className="liquid-glass-card transition-transform hover:scale-105">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 ">
                 <CardTitle className="text-sm font-medium">Số dư hiện tại</CardTitle>
@@ -1810,7 +1825,7 @@ export default function DashboardPage() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-xl sm:text-2xl font-bold">
                   {stats.totalSpent.toLocaleString('vi-VN')}đ
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -1873,27 +1888,27 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                   <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <p className="text-2xl font-bold text-blue-600">{userPurchases.length}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-blue-600">{userPurchases.length}</p>
                     <p className="text-xs text-muted-foreground">Sản phẩm đã mua</p>
                   </div>
                   <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                    <p className="text-2xl font-bold text-green-600">{depositHistory.length}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-600">{depositHistory.length}</p>
                     <p className="text-xs text-muted-foreground">Lịch sử nạp tiền</p>
                   </div>
                   <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                    <p className="text-2xl font-bold text-red-600">{withdrawHistory.length}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-red-600">{withdrawHistory.length}</p>
                     <p className="text-xs text-muted-foreground">Lịch sử rút tiền</p>
                   </div>
                   <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <p className="text-2xl font-bold text-purple-600">
+                    <p className="text-xl sm:text-2xl font-bold text-purple-600">
                       {downloadRecords.reduce((sum, record) => sum + (record.totalDownloads || 0), 0)}
                     </p>
                     <p className="text-xs text-muted-foreground">Tổng số lượt tải xuống</p>
                   </div>
                   <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                    <p className="text-2xl font-bold text-yellow-600">
+                    <p className="text-xl sm:text-2xl font-bold text-yellow-600">
                       {stats.totalSpent.toLocaleString('vi-VN')}đ
                     </p>
                     <p className="text-xs text-muted-foreground">Tổng chi tiêu</p>
@@ -1905,13 +1920,14 @@ export default function DashboardPage() {
 
           {/* Analytics Overview: Biểu đồ chi tiêu + Top sản phẩm + Hoạt động gần đây */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 animate-fade-in-up">
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 flex flex-col gap-6">
               <SpendingChart purchases={userPurchases.map(p => ({
                 id: p.id,
                 price: typeof p.price === 'number' ? p.price : (typeof p.price === 'string' ? parseFloat(p.price) || 0 : 0),
                 amount: typeof p.amount === 'number' ? p.amount : (typeof p.amount === 'string' ? parseFloat(p.amount) || 0 : 0),
                 purchaseDate: p.purchaseDate ? (typeof p.purchaseDate === 'string' ? p.purchaseDate : (p.purchaseDate instanceof Date ? p.purchaseDate.toISOString() : new Date().toISOString())) : new Date().toISOString()
               }))} />
+              <OverviewNotifications onViewAll={() => onDashboardTabChange("notifications")} />
             </div>
             <div className="space-y-4">
               <Card className="bg-white/60 dark:bg-black/50">
@@ -1984,62 +2000,98 @@ export default function DashboardPage() {
                       Chưa có hoạt động nào.
                     </p>
                   ) : (
-                    <div className="space-y-3 text-xs">
-                      {[
-                        ...userPurchases.map((p: any) => ({
-                          type: "purchase" as const,
-                          time: p.purchaseDate,
-                          label: `Mua "${p.title}"`,
-                          amount: Number(p.amount || p.price || 0),
-                        })),
-                        ...depositHistory.map((d: any) => ({
-                          type: "deposit" as const,
-                          time: d.approvedTime || d.timestamp,
-                          label: `Nạp ${Number(d.amount || 0).toLocaleString(
-                            "vi-VN"
-                          )}đ qua ${d.method}`,
-                          amount: Number(d.amount || 0),
-                        })),
-                        ...withdrawHistory.map((w: any) => ({
-                          type: "withdraw" as const,
-                          time: w.approvedTime || w.requestTime,
-                          label: `Rút ${Number(w.amount || 0).toLocaleString(
-                            "vi-VN"
-                          )}đ về ${w.bankName}`,
-                          amount: Number(w.amount || 0),
-                        })),
-                      ]
-                        .filter((item) => !!item.time)
-                        .sort(
-                          (a, b) =>
-                            new Date(b.time).getTime() -
-                            new Date(a.time).getTime()
-                        )
-                        .slice(0, 8)
-                        .map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-start justify-between"
-                          >
-                            <div>
-                              <p className="font-medium">{item.label}</p>
-                              <p className="text-[11px] text-muted-foreground">
-                                {new Date(item.time).toLocaleString(
-                                  "vi-VN"
-                                )}
-                              </p>
-                            </div>
-                            <span
-                              className={`ml-2 font-semibold ${item.type === "deposit"
-                                ? "text-green-600"
-                                : "text-red-600"
-                                }`}
-                            >
-                              {item.type === "deposit" ? "+" : "-"}
-                              {item.amount.toLocaleString("vi-VN")}đ
-                            </span>
-                          </div>
-                        ))}
+                    <div className="space-y-3 text-xs mb-4 min-h-[120px]">
+                      {(() => {
+                        const items = [
+                          ...userPurchases.map((p: any) => ({
+                            type: "purchase" as const,
+                            time: p.purchaseDate,
+                            label: `Mua "${p.title}"`,
+                            amount: Number(p.amount || p.price || 0),
+                          })),
+                          ...depositHistory.map((d: any) => ({
+                            type: "deposit" as const,
+                            time: d.approvedTime || d.timestamp,
+                            label: `Nạp ${Number(d.amount || 0).toLocaleString(
+                              "vi-VN"
+                            )}đ qua ${d.method}`,
+                            amount: Number(d.amount || 0),
+                          })),
+                          ...withdrawHistory.map((w: any) => ({
+                            type: "withdraw" as const,
+                            time: w.approvedTime || w.requestTime,
+                            label: `Rút ${Number(w.amount || 0).toLocaleString(
+                              "vi-VN"
+                            )}đ về ${w.bankName}`,
+                            amount: Number(w.amount || 0),
+                          })),
+                        ]
+                          .filter((item) => !!item.time)
+                          .sort(
+                            (a, b) =>
+                              new Date(b.time).getTime() -
+                              new Date(a.time).getTime()
+                          );
+                        
+                        const totalOverviewPages = Math.ceil(items.length / overviewActivityPageSize);
+                        const paginatedItems = items.slice((overviewActivityPage - 1) * overviewActivityPageSize, overviewActivityPage * overviewActivityPageSize);
+
+                        return (
+                          <>
+                            {paginatedItems.map((item, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-start justify-between p-1"
+                              >
+                                <div>
+                                  <p className="font-medium">{item.label}</p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {new Date(item.time).toLocaleString(
+                                      "vi-VN"
+                                    )}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`ml-2 font-semibold ${item.type === "deposit"
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                    }`}
+                                >
+                                  {item.type === "deposit" ? "+" : "-"}
+                                  {item.amount.toLocaleString("vi-VN")}đ
+                                </span>
+                              </div>
+                            ))}
+
+                            {/* Navigation Controls */}
+                            {totalOverviewPages > 1 && (
+                              <div className="flex items-center justify-center gap-4 mt-6 pt-2 border-t border-slate-200 dark:border-slate-800">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"
+                                  onClick={() => setOverviewActivityPage(prev => Math.max(1, prev - 1))}
+                                  disabled={overviewActivityPage === 1}
+                                >
+                                  <span className="text-lg">{"<"}</span>
+                                </Button>
+                                <span className="text-[10px] font-medium text-muted-foreground">
+                                  {overviewActivityPage} / {totalOverviewPages}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"
+                                  onClick={() => setOverviewActivityPage(prev => Math.min(totalOverviewPages, prev + 1))}
+                                  disabled={overviewActivityPage === totalOverviewPages}
+                                >
+                                  <span className="text-lg">{">"}</span>
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </CardContent>
@@ -2442,6 +2494,11 @@ export default function DashboardPage() {
                   helpfulCount: 0,
                   status: 'published' as const
                 }))}
+                purchasedProducts={userPurchases.map(p => ({
+                  id: String(p.id),
+                  productId: String(p.productId || p.id),
+                  title: p.title || 'Product'
+                }))}
                 onCreate={handleReviewCreate}
                 onUpdate={handleReviewUpdate}
                 onDelete={handleReviewDelete}
@@ -2703,48 +2760,79 @@ export default function DashboardPage() {
                       Chưa có hoạt động nào trong nhóm này.
                     </div>
                   ) : (
-                    <div className="space-y-3 max-h-[420px] overflow-y-auto pr-2">
-                      {filteredActivity.map((item) => (
-                        <div key={item.id} className="flex items-start gap-3 p-3 rounded-lg border">
-                          <Badge
-                            className={
-                              item.type === "purchase"
-                                ? "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-                                : item.type === "deposit"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-orange-100 text-orange-800"
-                            }
-                          >
-                            {item.type === "purchase"
-                              ? "Mua hàng"
-                              : item.type === "deposit"
-                                ? "Nạp tiền"
-                                : "Rút tiền"}
-                          </Badge>
-                          <div className="flex-1">
-                            <p className="font-medium">{item.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {item.time ? new Date(item.time).toLocaleString("vi-VN") : "—"}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p
+                    <>
+                      <div className="space-y-3 pr-2 min-h-[350px]">
+                        {paginatedActivity.map((item) => (
+                          <div key={item.id} className="flex items-start gap-3 p-3 rounded-lg border hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                            <Badge
                               className={
-                                item.type === "deposit"
-                                  ? "text-green-600 font-semibold"
-                                  : "text-red-600 font-semibold"
+                                item.type === "purchase"
+                                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                                  : item.type === "deposit"
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-orange-100 text-orange-800"
                               }
                             >
-                              {item.type === "deposit" ? "+" : "-"}
-                              {item.amount.toLocaleString("vi-VN")}đ
-                            </p>
-                            {item.meta && (
-                              <p className="text-xs text-muted-foreground">{item.meta}</p>
-                            )}
+                              {item.type === "purchase"
+                                ? "Mua hàng"
+                                : item.type === "deposit"
+                                  ? "Nạp tiền"
+                                  : "Rút tiền"}
+                            </Badge>
+                            <div className="flex-1">
+                              <p className="font-medium">{item.title}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.time ? new Date(item.time).toLocaleString("vi-VN") : "—"}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p
+                                className={
+                                  item.type === "deposit"
+                                    ? "text-green-600 font-semibold"
+                                    : "text-red-600 font-semibold"
+                                }
+                              >
+                                {item.type === "deposit" ? "+" : "-"}
+                                {item.amount.toLocaleString("vi-VN")}đ
+                              </p>
+                              {item.meta && (
+                                <p className="text-xs text-muted-foreground">{item.meta}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Pagination Controls */}
+                      {totalActivityPages > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                          <p className="text-xs text-muted-foreground">
+                            Trang {activityPage} / {totalActivityPages}
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => setActivityPage(prev => Math.max(1, prev - 1))}
+                              disabled={activityPage === 1}
+                            >
+                              <ChevronDown className="w-4 h-4 rotate-90" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => setActivityPage(prev => Math.min(totalActivityPages, prev + 1))}
+                              disabled={activityPage === totalActivityPages}
+                            >
+                              <ChevronDown className="w-4 h-4 -rotate-90" />
+                            </Button>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -2934,7 +3022,6 @@ export default function DashboardPage() {
               />
             </TabsContent>
           </Tabs>
-        </div>
       </main>
 
       <Footer />

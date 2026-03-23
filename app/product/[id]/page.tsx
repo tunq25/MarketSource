@@ -129,7 +129,7 @@ export default function ProductDetailPage() {
 
             <FloatingHeader />
 
-            <main className="container mx-auto px-4 py-8 relative z-10 max-w-6xl">
+            <main className="container mx-auto px-4 py-8 relative z-10 max-w-7xl">
                 <Button
                     onClick={() => router.back()}
                     variant="ghost"

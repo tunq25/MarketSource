@@ -91,11 +91,11 @@ export function Deposit({
                     <p className="text-sm text-muted-foreground">{deposit.userEmail}</p>
 
                     {/* Enhanced User Info */}
-                    <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded border-l-4 border-blue-500 shadow-inner">
-                      <p className="text-xs text-blue-600">
+                    <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded border-l-4 border-blue-500 shadow-sm">
+                      <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
                         💰 Số dư hiện tại: {Number(deposit.userBalance || 0).toLocaleString('vi-VN')}đ
                       </p>
-                      <p className="text-xs text-green-600">
+                      <p className="text-xs font-medium text-green-700 dark:text-green-400 mt-1">
                         ➕ Sau nạp: {(Number(deposit.userBalance || 0) + Number(deposit.amount || 0)).toLocaleString('vi-VN')}đ
                       </p>
                     </div>
@@ -115,10 +115,10 @@ export function Deposit({
                       <p className="text-xs text-muted-foreground">
                         🕐 Thời gian: {deposit.requestTimeFormatted}
                       </p>
-                      <p className="text-xs text-blue-600">
+                      <p className="text-xs text-blue-700 dark:text-blue-400">
                         🌐 IP: {deposit.ipAddress || deposit.ip_address || 'Unknown'}
                       </p>
-                      <p className="text-xs text-blue-600">
+                      <p className="text-xs text-blue-700 dark:text-blue-400">
                         📱 Thiết bị: {deposit.deviceInfo?.deviceType || deposit.device_info?.deviceType || 'Unknown'} ({deposit.deviceInfo?.browser || deposit.device_info?.browser || 'Unknown'})
                       </p>
                       {deposit.note && (

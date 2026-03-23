@@ -209,17 +209,17 @@ function ColorPicker({ label, value, onChange, name }: {
                     onChange={(e) => onChange(name, e.target.value)}
                     className="w-10 h-10 rounded-lg border-2 border-white/10 cursor-pointer appearance-none bg-transparent [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-lg [&::-webkit-color-swatch]:border-0"
                 />
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity border border-border whitespace-nowrap pointer-events-none">
                     {value}
                 </div>
             </div>
             <div className="flex-1">
-                <div className="text-sm font-medium text-gray-200">{label}</div>
+                <div className="text-sm font-medium text-foreground dark:text-gray-200">{label}</div>
                 <input
                     type="text"
                     value={value}
                     onChange={(e) => onChange(name, e.target.value)}
-                    className="text-xs text-gray-400 bg-transparent border-none outline-none w-20 font-mono"
+                    className="text-xs text-muted-foreground bg-transparent border-none outline-none w-20 font-mono"
                     placeholder="#000000"
                 />
             </div>
@@ -232,8 +232,8 @@ function FormField({ label, desc, children }: {
 }) {
     return (
         <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-200">{label}</label>
-            {desc && <p className="text-xs text-gray-500">{desc}</p>}
+            <label className="text-sm font-medium text-foreground dark:text-gray-200">{label}</label>
+            {desc && <p className="text-xs text-muted-foreground dark:text-gray-500">{desc}</p>}
             {children}
         </div>
     )
@@ -247,7 +247,7 @@ function SelectField({ label, desc, value, options, onChange }: {
             <select
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-sm text-gray-200 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all"
+                className="w-full px-3 py-2 dark:bg-gray-800/60 bg-muted/60 border border-border rounded-lg text-sm text-foreground dark:text-gray-200 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all"
             >
                 {options.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -267,7 +267,7 @@ function InputField({ label, desc, value, onChange, name, type = "text", placeho
                 value={value}
                 onChange={(e) => onChange(name, e.target.value)}
                 placeholder={placeholder}
-                className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-sm text-gray-200 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all placeholder:text-gray-600"
+                className="w-full px-3 py-2 dark:bg-gray-800/60 bg-muted/60 border border-border rounded-lg text-sm text-foreground dark:text-gray-200 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all placeholder:text-muted-foreground"
             />
         </FormField>
     )
@@ -282,7 +282,7 @@ function TextareaField({ label, desc, value, onChange, name, rows = 3, mono = fa
                 value={value}
                 onChange={(e) => onChange(name, e.target.value)}
                 rows={rows}
-                className={`w-full px-3 py-2 bg-gray-800/60 border border-gray-700 rounded-lg text-sm text-gray-200 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all resize-y placeholder:text-gray-600 ${mono ? "font-mono text-xs" : ""}`}
+                className={`w-full px-3 py-2 dark:bg-gray-800/60 bg-muted/60 border border-border rounded-lg text-sm text-foreground dark:text-gray-200 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 transition-all resize-y placeholder:text-muted-foreground ${mono ? "font-mono text-xs" : ""}`}
             />
         </FormField>
     )
@@ -294,13 +294,13 @@ function ToggleField({ label, desc, value, onChange }: {
     return (
         <div className="flex items-center justify-between py-2">
             <div>
-                <div className="text-sm font-medium text-gray-200">{label}</div>
-                {desc && <p className="text-xs text-gray-500">{desc}</p>}
+                <div className="text-sm font-medium text-foreground dark:text-gray-200">{label}</div>
+                {desc && <p className="text-xs text-muted-foreground dark:text-gray-500">{desc}</p>}
             </div>
             <button
                 type="button"
                 onClick={() => onChange(!value)}
-                className={`relative w-11 h-6 rounded-full transition-colors ${value ? "bg-purple-600" : "bg-gray-700"}`}
+                className={`relative w-11 h-6 rounded-full transition-colors ${value ? "bg-purple-600" : "bg-muted-foreground/30 dark:bg-gray-700"}`}
             >
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${value ? "translate-x-5" : ""}`} />
             </button>
@@ -311,8 +311,8 @@ function ToggleField({ label, desc, value, onChange }: {
 function SectionHeader({ title, desc }: { title: string; desc?: string }) {
     return (
         <div className="mb-5">
-            <h3 className="text-lg font-semibold text-white">{title}</h3>
-            {desc && <p className="text-sm text-gray-400 mt-1">{desc}</p>}
+            <h3 className="text-lg font-semibold text-foreground dark:text-white">{title}</h3>
+            {desc && <p className="text-sm text-muted-foreground dark:text-gray-400 mt-1">{desc}</p>}
         </div>
     )
 }
@@ -429,7 +429,7 @@ export function AppearanceManager() {
             <div className="flex items-center justify-center min-h-[400px]">
                 <div className="text-center space-y-3">
                     <div className="w-10 h-10 border-3 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-gray-400">Đang tải cấu hình giao diện...</p>
+                    <p className="text-muted-foreground dark:text-gray-400">Đang tải cấu hình giao diện...</p>
                 </div>
             </div>
         )
@@ -452,8 +452,8 @@ export function AppearanceManager() {
                             <div className="flex gap-6 pt-3">
                                 {settings.logoUrl && (
                                     <div className="space-y-2">
-                                        <p className="text-xs text-gray-500">Preview Logo</p>
-                                        <div className="w-40 h-16 bg-gray-800 rounded-lg flex items-center justify-center p-2 border border-gray-700">
+                                        <p className="text-xs text-muted-foreground dark:text-gray-500">Preview Logo</p>
+                                        <div className="w-40 h-16 dark:bg-gray-800 bg-muted rounded-lg flex items-center justify-center p-2 border border-border dark:border-gray-700">
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img src={settings.logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                                         </div>
@@ -461,8 +461,8 @@ export function AppearanceManager() {
                                 )}
                                 {settings.faviconUrl && (
                                     <div className="space-y-2">
-                                        <p className="text-xs text-gray-500">Preview Favicon</p>
-                                        <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center p-1 border border-gray-700">
+                                        <p className="text-xs text-muted-foreground dark:text-gray-500">Preview Favicon</p>
+                                        <div className="w-12 h-12 dark:bg-gray-800 bg-muted rounded-lg flex items-center justify-center p-1 border border-border dark:border-gray-700">
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img src={settings.faviconUrl} alt="Favicon" className="max-h-full max-w-full" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                                         </div>
@@ -479,27 +479,27 @@ export function AppearanceManager() {
                         <SectionHeader title="Bảng màu" desc="Tùy chỉnh toàn bộ bảng màu hoặc chọn preset có sẵn" />
                         {/* Presets */}
                         <div>
-                            <p className="text-sm font-medium text-gray-300 mb-3">Preset nhanh</p>
+                            <p className="text-sm font-medium text-foreground dark:text-gray-300 mb-3">Preset nhanh</p>
                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                                 {PRESETS.map((p) => (
                                     <button
                                         key={p.name}
                                         onClick={() => applyPreset(p)}
-                                        className="group relative p-3 rounded-xl border border-gray-700 hover:border-purple-500 transition-all bg-gray-800/40 hover:bg-gray-800/80"
+                                        className="group relative p-3 rounded-xl border border-border dark:border-gray-700 hover:border-purple-500 transition-all dark:bg-gray-800/40 bg-muted/40 dark:hover:bg-gray-800/80 hover:bg-muted/60"
                                     >
                                         <div className="flex gap-1 mb-2 justify-center">
                                             {[p.colors.primaryColor, p.colors.secondaryColor, p.colors.accentColor].map((c, i) => (
                                                 <div key={i} className="w-5 h-5 rounded-full border border-white/10" style={{ backgroundColor: c }} />
                                             ))}
                                         </div>
-                                        <p className="text-xs text-gray-400 text-center group-hover:text-white transition-colors">{p.name}</p>
+                                        <p className="text-xs text-muted-foreground dark:text-gray-400 text-center group-hover:text-foreground dark:group-hover:text-white transition-colors">{p.name}</p>
                                     </button>
                                 ))}
                             </div>
                         </div>
                         {/* Main Colors */}
                         <div>
-                            <p className="text-sm font-medium text-gray-300 mb-3">Màu chính</p>
+                            <p className="text-sm font-medium text-foreground dark:text-gray-300 mb-3">Màu chính</p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <ColorPicker label="Primary" name="primaryColor" value={settings.primaryColor} onChange={handleChange} />
                                 <ColorPicker label="Secondary" name="secondaryColor" value={settings.secondaryColor} onChange={handleChange} />
@@ -508,7 +508,7 @@ export function AppearanceManager() {
                         </div>
                         {/* Background & Surface */}
                         <div>
-                            <p className="text-sm font-medium text-gray-300 mb-3">Nền & Bề mặt</p>
+                            <p className="text-sm font-medium text-foreground dark:text-gray-300 mb-3">Nền & Bề mặt</p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <ColorPicker label="Background" name="backgroundColor" value={settings.backgroundColor} onChange={handleChange} />
                                 <ColorPicker label="Surface" name="surfaceColor" value={settings.surfaceColor} onChange={handleChange} />
@@ -517,7 +517,7 @@ export function AppearanceManager() {
                         </div>
                         {/* Text */}
                         <div>
-                            <p className="text-sm font-medium text-gray-300 mb-3">Chữ viết</p>
+                            <p className="text-sm font-medium text-foreground dark:text-gray-300 mb-3">Chữ viết</p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <ColorPicker label="Text chính" name="textColor" value={settings.textColor} onChange={handleChange} />
                                 <ColorPicker label="Text phụ" name="mutedTextColor" value={settings.mutedTextColor} onChange={handleChange} />
@@ -525,16 +525,15 @@ export function AppearanceManager() {
                         </div>
                         {/* Status */}
                         <div>
-                            <p className="text-sm font-medium text-gray-300 mb-3">Trạng thái</p>
+                            <p className="text-sm font-medium text-foreground dark:text-gray-300 mb-3">Trạng thái</p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <ColorPicker label="Thành công" name="successColor" value={settings.successColor} onChange={handleChange} />
                                 <ColorPicker label="Cảnh báo" name="warningColor" value={settings.warningColor} onChange={handleChange} />
                                 <ColorPicker label="Lỗi" name="errorColor" value={settings.errorColor} onChange={handleChange} />
                             </div>
                         </div>
-                        {/* Live preview bar */}
-                        <div className="p-4 rounded-xl border border-gray-700" style={{ backgroundColor: settings.backgroundColor }}>
-                            <p className="text-xs text-gray-500 mb-2">Preview nhanh</p>
+                        <div className="p-4 rounded-xl border border-border dark:border-gray-700" style={{ backgroundColor: settings.backgroundColor }}>
+                            <p className="text-xs text-muted-foreground dark:text-gray-500 mb-2">Preview nhanh</p>
                             <div className="flex gap-2 flex-wrap">
                                 <span className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ backgroundColor: settings.primaryColor }}>Primary</span>
                                 <span className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ backgroundColor: settings.secondaryColor }}>Secondary</span>
@@ -587,12 +586,12 @@ export function AppearanceManager() {
                             />
                         </div>
                         {/* Font Preview */}
-                        <div className="p-5 rounded-xl border border-gray-700 bg-gray-800/40 space-y-3">
-                            <p className="text-xs text-gray-500">Preview</p>
-                            <h2 style={{ fontFamily: settings.headingFont, fontWeight: parseInt(settings.headingWeight), fontSize: `${parseInt(settings.baseFontSize) + 8}px` }} className="text-white">
+                        <div className="p-5 rounded-xl border border-border dark:border-gray-700 dark:bg-gray-800/40 bg-muted/40 space-y-3">
+                            <p className="text-xs text-muted-foreground dark:text-gray-500">Preview</p>
+                            <h2 style={{ fontFamily: settings.headingFont, fontWeight: parseInt(settings.headingWeight), fontSize: `${parseInt(settings.baseFontSize) + 8}px` }} className="text-foreground dark:text-white">
                                 Tiêu đề mẫu — {settings.headingFont}
                             </h2>
-                            <p style={{ fontFamily: settings.bodyFont, fontSize: `${settings.baseFontSize}px` }} className="text-gray-300">
+                            <p style={{ fontFamily: settings.bodyFont, fontSize: `${settings.baseFontSize}px` }} className="text-foreground dark:text-gray-300">
                                 Đây là đoạn văn bản mẫu với font {settings.bodyFont} cỡ {settings.baseFontSize}px. Trải nghiệm xem trước phông chữ trực tiếp trước khi lưu cấu hình.
                             </p>
                         </div>
@@ -706,8 +705,8 @@ export function AppearanceManager() {
                             />
                         </div>
                         {/* Visual preview */}
-                        <div className="p-4 rounded-xl border border-gray-700 bg-gray-800/40">
-                            <p className="text-xs text-gray-500 mb-3">Preview Card Style</p>
+                        <div className="p-4 rounded-xl border border-border dark:border-gray-700 dark:bg-gray-800/40 bg-muted/40">
+                            <p className="text-xs text-muted-foreground dark:text-gray-500 mb-3">Preview Card Style</p>
                             <div
                                 className="p-4 max-w-xs"
                                 style={{
@@ -718,8 +717,8 @@ export function AppearanceManager() {
                                     boxShadow: settings.cardStyle === "shadow" ? "0 10px 30px rgba(0,0,0,0.3)" : "none",
                                 }}
                             >
-                                <h4 className="text-white font-semibold text-sm mb-1">Card mẫu</h4>
-                                <p className="text-gray-400 text-xs">Đây là preview kiểu card với border radius {settings.borderRadius}px</p>
+                                <h4 className="text-foreground dark:text-white font-semibold text-sm mb-1">Card mẫu</h4>
+                                <p className="text-muted-foreground dark:text-gray-400 text-xs">Đây là preview kiểu card với border radius {settings.borderRadius}px</p>
                             </div>
                         </div>
                     </div>
@@ -774,11 +773,11 @@ export function AppearanceManager() {
                         <InputField label="Meta Keywords" desc="Từ khóa (cách nhau bằng dấu phẩy)" name="metaKeywords" value={settings.metaKeywords} onChange={handleChange} placeholder="source code, marketplace, web templates" />
                         <InputField label="OG Image URL" desc="Hình ảnh khi share link lên mạng xã hội (1200x630px)" name="ogImage" value={settings.ogImage} onChange={handleChange} placeholder="https://example.com/og-image.jpg" />
                         {/* SEO preview */}
-                        <div className="p-4 rounded-xl border border-gray-700 bg-gray-800/40 space-y-1">
-                            <p className="text-xs text-gray-500 mb-2">Preview trên Google</p>
+                        <div className="p-4 rounded-xl border border-border dark:border-gray-700 dark:bg-gray-800/40 bg-muted/40 space-y-1">
+                            <p className="text-xs text-muted-foreground dark:text-gray-500 mb-2">Preview trên Google</p>
                             <p className="text-blue-400 text-base hover:underline cursor-pointer">{settings.metaTitle || "Tiêu đề trang"}</p>
                             <p className="text-green-400 text-xs">qtusdev.com</p>
-                            <p className="text-gray-400 text-sm line-clamp-2">{settings.metaDescription || "Mô tả trang web..."}</p>
+                            <p className="text-muted-foreground dark:text-gray-400 text-sm line-clamp-2">{settings.metaDescription || "Mô tả trang web..."}</p>
                         </div>
                     </div>
                 )
@@ -822,16 +821,16 @@ export function AppearanceManager() {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <h1 className="text-2xl font-bold text-foreground dark:text-white flex items-center gap-3">
                         {icons.palette}
                         Tùy chỉnh giao diện
                     </h1>
-                    <p className="text-sm text-gray-400 mt-1">Chỉnh sửa toàn bộ giao diện website: màu sắc, font chữ, bố cục, SEO...</p>
+                    <p className="text-sm text-muted-foreground dark:text-gray-400 mt-1">Chỉnh sửa toàn bộ giao diện website: màu sắc, font chữ, bố cục, SEO...</p>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
                         onClick={resetToDefault}
-                        className="px-3 py-2 text-sm rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-all flex items-center gap-1.5"
+                        className="px-3 py-2 text-sm rounded-lg border border-border dark:border-gray-700 text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white hover:border-accent dark:hover:border-gray-500 transition-all flex items-center gap-1.5"
                     >
                         {icons.reset} Reset
                     </button>
@@ -839,7 +838,7 @@ export function AppearanceManager() {
                         onClick={() => setShowPreview(!showPreview)}
                         className={`px-3 py-2 text-sm rounded-lg border transition-all flex items-center gap-1.5 ${showPreview
                                 ? 'border-purple-500 text-purple-400 bg-purple-500/10'
-                                : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+                                : 'border-border dark:border-gray-700 text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white hover:border-accent dark:hover:border-gray-500'
                             }`}
                     >
                         {icons.eye} {showPreview ? 'Ẩn Preview' : 'Xem trước'}
@@ -847,7 +846,7 @@ export function AppearanceManager() {
                     <button
                         onClick={loadSettings}
                         disabled={isSaving}
-                        className="px-3 py-2 text-sm rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 transition-all flex items-center gap-1.5"
+                        className="px-3 py-2 text-sm rounded-lg border border-border dark:border-gray-700 text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white hover:border-accent dark:hover:border-gray-500 transition-all flex items-center gap-1.5"
                     >
                         <span className={isSaving ? "animate-spin" : ""}>{icons.refresh}</span> Tải lại
                     </button>
@@ -856,7 +855,7 @@ export function AppearanceManager() {
                         disabled={isSaving || !hasChanges}
                         className={`px-5 py-2 text-sm rounded-lg font-medium flex items-center gap-2 transition-all ${hasChanges
                             ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-600/20"
-                            : "bg-gray-800 text-gray-500 cursor-not-allowed"
+                            : "dark:bg-gray-800 bg-muted text-muted-foreground dark:text-gray-500 cursor-not-allowed"
                             }`}
                     >
                         {isSaving ? (
@@ -888,7 +887,7 @@ export function AppearanceManager() {
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === tab.id
                                     ? "bg-purple-600/20 text-purple-400 border border-purple-500/30"
-                                    : "text-gray-400 hover:text-white hover:bg-gray-800/60"
+                                    : "text-muted-foreground dark:text-gray-400 hover:text-foreground dark:hover:text-white hover:bg-muted/60 dark:hover:bg-gray-800/60"
                                     }`}
                             >
                                 {tab.icon}
@@ -900,7 +899,7 @@ export function AppearanceManager() {
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                    <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
+                    <div className="dark:bg-gray-900/50 bg-card/50 border border-border dark:border-gray-800 rounded-2xl p-6">
                         {renderTabContent()}
                     </div>
                 </div>
@@ -908,17 +907,17 @@ export function AppearanceManager() {
 
             {/* ═══════════ LIVE WEBSITE PREVIEW ═══════════ */}
             {showPreview && (
-                <div className="mt-6 border border-gray-700 rounded-2xl overflow-hidden bg-gray-900/80">
-                    <div className="flex items-center justify-between px-4 py-2 bg-gray-800/80 border-b border-gray-700">
+                <div className="mt-6 border border-border dark:border-gray-700 rounded-2xl overflow-hidden dark:bg-gray-900/80 bg-background/80">
+                    <div className="flex items-center justify-between px-4 py-2 dark:bg-gray-800/80 bg-muted/80 border-b border-border dark:border-gray-700">
                         <div className="flex items-center gap-2">
                             <div className="flex gap-1.5">
                                 <div className="w-3 h-3 rounded-full bg-red-500" />
                                 <div className="w-3 h-3 rounded-full bg-yellow-500" />
                                 <div className="w-3 h-3 rounded-full bg-green-500" />
                             </div>
-                            <span className="text-[11px] text-gray-500 ml-2">Live Preview — {settings.siteName}</span>
+                            <span className="text-[11px] text-muted-foreground dark:text-gray-500 ml-2">Live Preview — {settings.siteName}</span>
                         </div>
-                        <button onClick={() => setShowPreview(false)} className="text-gray-500 hover:text-white text-xs">✕ Đóng</button>
+                        <button onClick={() => setShowPreview(false)} className="text-muted-foreground dark:text-gray-500 hover:text-foreground dark:hover:text-white text-xs">✕ Đóng</button>
                     </div>
 
                     {/* Preview Content */}

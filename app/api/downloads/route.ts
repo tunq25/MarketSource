@@ -24,8 +24,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Lấy DB user ID từ email
-    const dbUserId = await getUserIdByEmail(authUser.email || '')
+    // ✅ FIX: Lấy DB user ID ưu tiên từ UID để chống IDOR
+    let dbUserId: number | undefined;
+    if (authUser.uid) {
+       const userRecord = await query<{ id: number }>('SELECT id FROM users WHERE uid = $1', [authUser.uid]);
+       dbUserId = userRecord?.[0]?.id;
+    }
+    if (!dbUserId) {
+       dbUserId = await getUserIdByEmail(authUser.email || '') || undefined;
+    }
+    
     if (!dbUserId) {
       return NextResponse.json({ success: true, downloads: [] })
     }

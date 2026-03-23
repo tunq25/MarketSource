@@ -56,7 +56,7 @@ export const profileUpdateSchema = z.object({
   city: z.string().max(100).optional().nullable(),
   country: z.string().max(100).optional().nullable(),
   postalCode: z.string().max(20).optional().nullable(),
-  socialLinks: z.record(z.string().nullable()).optional().nullable(),
+  socialLinks: z.record(z.string().max(50).regex(/^[a-zA-Z0-9_\-]+$/), z.string().max(500).nullable()).optional().nullable(),
   twoFactorEnabled: z.boolean().optional(),
 })
 
@@ -118,34 +118,34 @@ export const withdrawalSchema = z.object({
 // Product schemas
 export const productSchema = z.object({
   title: z.string().min(1, 'Tiêu đề không được để trống').max(255),
-  description: z.string().optional().nullable(),
-  detailedDescription: z.string().optional().nullable(),
-  price: z.coerce.number().min(0, 'Giá không được âm'),
-  category: z.string().optional().nullable(),
-  demoUrl: z.string().url('Demo URL không hợp lệ (cần bắt đầu bằng http/https)').optional().nullable(),
-  downloadUrl: z.string().url('Download URL không hợp lệ').optional().nullable(),
-  tags: z.array(z.string()).optional().nullable(),
-  imageUrl: z.string().url('Image URL không hợp lệ').optional().nullable(),
-  imageUrls: z.array(z.string().url()).optional().nullable(),
+  description: z.string().max(2000, 'Mô tả ngắn tối đa 2000 ký tự').optional().nullable(),
+  detailedDescription: z.string().max(50000, 'Mô tả chi tiết quá dài (tối đa 50,000 ký tự)').optional().nullable(),
+  price: z.coerce.number().min(0, 'Giá không được âm').max(1000000000, 'Giá quá lớn'),
+  category: z.string().max(100).optional().nullable(),
+  demoUrl: z.string().url('Demo URL không hợp lệ (cần bắt đầu bằng http/https)').max(500).optional().nullable(),
+  downloadUrl: z.string().url('Download URL không hợp lệ').max(1000).optional().nullable(),
+  tags: z.array(z.string().max(50)).max(20).optional().nullable(),
+  imageUrl: z.string().url('Image URL không hợp lệ').max(1000).optional().nullable(),
+  imageUrls: z.array(z.string().url().max(1000)).max(10).optional().nullable(),
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),  // ✅ FIX: Thêm isFeatured field
 })
 
 export const updateProductSchema = z.object({
   title: z.string().min(1, 'Tiêu đề không được để trống').max(255).optional(),
-  description: z.string().optional().nullable(),
-  detailedDescription: z.string().optional().nullable(),
-  price: z.coerce.number().min(0, 'Giá không được âm').optional(),
-  category: z.string().optional().nullable(),
-  demoUrl: z.string().url('Demo URL không hợp lệ').optional().nullable(),
-  downloadUrl: z.string().url('Download URL không hợp lệ').optional().nullable(),
-  tags: z.array(z.string()).optional().nullable(),
-  imageUrl: z.string().url('Image URL không hợp lệ').optional().nullable(),
-  imageUrls: z.array(z.string().url()).optional().nullable(),
+  description: z.string().max(2000).optional().nullable(),
+  detailedDescription: z.string().max(50000).optional().nullable(),
+  price: z.coerce.number().min(0, 'Giá không được âm').max(1000000000).optional(),
+  category: z.string().max(100).optional().nullable(),
+  demoUrl: z.string().url('Demo URL không hợp lệ').max(500).optional().nullable(),
+  downloadUrl: z.string().url('Download URL không hợp lệ').max(1000).optional().nullable(),
+  tags: z.array(z.string().max(50)).max(20).optional().nullable(),
+  imageUrl: z.string().url('Image URL không hợp lệ').max(1000).optional().nullable(),
+  imageUrls: z.array(z.string().url().max(1000)).max(10).optional().nullable(),
   isActive: z.boolean().optional(),
   isFeatured: z.boolean().optional(),  // ✅ FIX: Thêm isFeatured field
   averageRating: z.coerce.number().min(0).max(5).optional(),
-  downloadCount: z.coerce.number().int().min(0).optional(),
+  downloadCount: z.coerce.number().int().min(0).max(1000000000).optional(),
 })
 
 // Purchase schemas

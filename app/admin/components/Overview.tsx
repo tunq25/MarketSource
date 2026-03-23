@@ -24,7 +24,7 @@ export function Overview({ stats, users, purchases, notifications }: OverviewPro
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 ">
-        <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
+        <Card className="neon-border-hover glass-panel text-foreground">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 ">
             <CardTitle className="text-sm font-medium ">Tổng người dùng</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -37,7 +37,7 @@ export function Overview({ stats, users, purchases, notifications }: OverviewPro
           </CardContent>
         </Card>
 
-        <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
+        <Card className="neon-border-hover glass-panel text-foreground">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 ">
             <CardTitle className="text-sm font-medium">Tổng sản phẩm</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
@@ -50,7 +50,7 @@ export function Overview({ stats, users, purchases, notifications }: OverviewPro
           </CardContent>
         </Card>
 
-        <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
+        <Card className="neon-border-hover glass-panel text-foreground">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Tổng doanh thu</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -65,7 +65,7 @@ export function Overview({ stats, users, purchases, notifications }: OverviewPro
           </CardContent>
         </Card>
 
-        <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
+        <Card className="neon-border-hover glass-panel text-foreground">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Chờ duyệt</CardTitle>
             <Bell className="h-4 w-4 text-muted-foreground" />
@@ -104,8 +104,8 @@ export function Overview({ stats, users, purchases, notifications }: OverviewPro
                 .slice(0, 10)
                 .map((purchase) => (
                 <div key={purchase.id} className="flex items-center space-x-4 p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">
-                  <div className="bg-green-100 dark:bg-green-900/20 p-2 rounded-full">
-                    <Package className="w-4 h-4 text-green-600" />
+                  <div className="bg-green-100/50 dark:bg-green-900/20 p-2 rounded-full">
+                    <Package className="w-4 h-4 text-green-700 dark:text-green-400" />
                   </div>
                   <div className="flex-1">
                     {/* ✅ FIX: Fallback cho title null */}
@@ -140,7 +140,7 @@ export function Overview({ stats, users, purchases, notifications }: OverviewPro
           </CardContent>
         </Card>
 
-        <Card className="neon-border-hover glass-panel text-slate-900 dark:text-slate-100">
+        <Card className="neon-border-hover glass-panel text-foreground">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               Đăng ký mới ({stats.newUsersCount})
@@ -170,8 +170,8 @@ export function Overview({ stats, users, purchases, notifications }: OverviewPro
                 .slice(0, 10)
                 .map((user) => (
                   <div key={user.uid || user.id} className="flex items-center space-x-4 p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">
-                    <div className="bg-blue-100 dark:bg-blue-900/20 p-2 rounded-full relative">
-                      <Users className="w-4 h-4 text-blue-600" />
+                    <div className="bg-blue-100/50 dark:bg-blue-900/20 p-2 rounded-full relative">
+                      <Users className="w-4 h-4 text-blue-700 dark:text-blue-400" />
                       <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
                     </div>
                     <div className="flex-1">
@@ -180,7 +180,7 @@ export function Overview({ stats, users, purchases, notifications }: OverviewPro
                       <p className="text-xs text-muted-foreground">
                         Đăng ký: {new Date(user.createdAt || user.created_at).toLocaleString('vi-VN')}
                       </p>
-                      <p className="text-xs text-blue-600">
+                      <p className="text-xs text-blue-700 dark:text-blue-400">
                         Số dư: {(user.balance || 0).toLocaleString('vi-VN')}đ
                       </p>
                     </div>

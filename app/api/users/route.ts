@@ -49,7 +49,15 @@ export async function GET(request: NextRequest) {
 
       // User chỉ xem được data của mình, admin xem được tất cả
       if (!isAdmin) {
-        const currentUserId = await getUserIdByEmail(authUser?.email || '')
+        let currentUserId: number | undefined;
+        if (authUser?.uid) {
+           const userRecord = await query<{ id: number }>('SELECT id FROM users WHERE uid = $1', [authUser.uid]);
+           currentUserId = userRecord?.[0]?.id;
+        }
+        if (!currentUserId) {
+           currentUserId = await getUserIdByEmail(authUser?.email || '') || undefined;
+        }
+
         if (String(currentUserId) !== String(user.id)) {
           return NextResponse.json({ error: 'Unauthorized access to other user profile' }, { status: 403 })
         }
@@ -122,7 +130,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 });
     }
 
-    const currentUserId = await getUserIdByEmail(authUser.email || '')
+    let currentUserId: number | undefined;
+    if (authUser?.uid) {
+       const userRecord = await query<{ id: number }>('SELECT id FROM users WHERE uid = $1', [authUser.uid]);
+       currentUserId = userRecord?.[0]?.id;
+    }
+    if (!currentUserId) {
+       currentUserId = await getUserIdByEmail(authUser?.email || '') || undefined;
+    }
     let isAdmin = false
     let adminSession: Awaited<ReturnType<typeof requireAdmin>> | null = null
     try {

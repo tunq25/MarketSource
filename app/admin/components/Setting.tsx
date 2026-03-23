@@ -81,14 +81,14 @@ export function Setting({
 
   const TokenInput = ({ label, tokenKey, placeholder, icon: Icon }: { label: string; tokenKey: string; placeholder: string; icon: any }) => (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium text-slate-400 flex items-center gap-1.5">
+      <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
         <Icon className="w-3.5 h-3.5" />
         {label}
       </Label>
       <div className="relative">
         <Input
           type={showTokens[tokenKey] ? "text" : "password"}
-          className="bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 pr-10 h-9 text-sm"
+          className="dark:bg-slate-800/50 bg-muted/50 border-border dark:text-white text-foreground placeholder:text-muted-foreground pr-10 h-9 text-sm"
           value={(tokens as any)[tokenKey] || ""}
           placeholder={configStatus[tokenKey] ? "••••••••" : placeholder}
           onChange={(e) => setTokens(prev => ({ ...prev, [tokenKey]: e.target.value }))}
@@ -96,7 +96,7 @@ export function Setting({
         <button
           type="button"
           onClick={() => toggleShow(tokenKey)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
         >
           {showTokens[tokenKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </button>
@@ -110,7 +110,7 @@ export function Setting({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Telegram */}
-        <Card className="neon-border-hover glass-panel text-slate-100 border-slate-700/50">
+        <Card className="neon-border-hover glass-panel text-foreground border-border">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center text-base">
               <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center mr-2">
@@ -118,7 +118,7 @@ export function Setting({
               </div>
               Telegram Bot
             </CardTitle>
-            <CardDescription className="text-slate-400 text-xs">
+            <CardDescription className="text-muted-foreground text-xs">
               Nhận thông báo nạp/rút/đơn hàng qua Telegram
             </CardDescription>
           </CardHeader>
@@ -137,7 +137,7 @@ export function Setting({
         </Card>
 
         {/* WhatsApp */}
-        <Card className="neon-border-hover glass-panel text-slate-100 border-slate-700/50">
+        <Card className="neon-border-hover glass-panel text-foreground border-border">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center text-base">
               <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center mr-2">
@@ -145,7 +145,7 @@ export function Setting({
               </div>
               WhatsApp
             </CardTitle>
-            <CardDescription className="text-slate-400 text-xs">
+            <CardDescription className="text-muted-foreground text-xs">
               Gửi thông báo qua WhatsApp Twilio
             </CardDescription>
           </CardHeader>
@@ -163,7 +163,7 @@ export function Setting({
         </Card>
 
         {/* Gemini AI */}
-        <Card className="neon-border-hover glass-panel text-slate-100 border-slate-700/50">
+        <Card className="neon-border-hover glass-panel text-foreground border-border">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center text-base">
               <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center mr-2">
@@ -171,7 +171,7 @@ export function Setting({
               </div>
               Gemini AI
             </CardTitle>
-            <CardDescription className="text-slate-400 text-xs">
+            <CardDescription className="text-muted-foreground text-xs">
               AI tự động trả lời chat khách hàng
             </CardDescription>
           </CardHeader>
@@ -181,13 +181,13 @@ export function Setting({
               <Badge variant="outline" className="text-[10px] border-purple-500/30 text-purple-400">
                 {configStatus.geminiApiKey ? '✅ Đã cấu hình' : '⚠️ Chưa cấu hình'}
               </Badge>
-              <span className="text-[10px] text-slate-500">Model: gemini-2.0-flash</span>
+              <span className="text-[10px] text-muted-foreground">Model: gemini-2.0-flash</span>
             </div>
           </CardContent>
         </Card>
 
         {/* hCaptcha */}
-        <Card className="neon-border-hover glass-panel text-slate-100 border-slate-700/50">
+        <Card className="neon-border-hover glass-panel text-foreground border-border">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center text-base">
               <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center mr-2">
@@ -195,7 +195,7 @@ export function Setting({
               </div>
               hCaptcha
             </CardTitle>
-            <CardDescription className="text-slate-400 text-xs">
+            <CardDescription className="text-muted-foreground text-xs">
               Bảo vệ form đăng ký/đăng nhập
             </CardDescription>
           </CardHeader>
@@ -206,7 +206,7 @@ export function Setting({
         </Card>
 
         {/* SMTP Email */}
-        <Card className="neon-border-hover glass-panel text-slate-100 border-slate-700/50 lg:col-span-2">
+        <Card className="neon-border-hover glass-panel text-foreground border-border lg:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center text-base">
               <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center mr-2">
@@ -214,7 +214,7 @@ export function Setting({
               </div>
               Email SMTP
             </CardTitle>
-            <CardDescription className="text-slate-400 text-xs">
+            <CardDescription className="text-muted-foreground text-xs">
               Gửi OTP, thông báo qua email
             </CardDescription>
           </CardHeader>
@@ -230,7 +230,7 @@ export function Setting({
 
       {/* Save Button */}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           ⚠️ Thay đổi API tokens yêu cầu restart server để có hiệu lực
         </p>
         <Button
@@ -249,29 +249,29 @@ export function Setting({
       </div>
 
       {/* System Info */}
-      <Card className="neon-border-hover glass-panel text-slate-100 border-slate-700/50">
+      <Card className="neon-border-hover glass-panel text-foreground border-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Thông tin hệ thống</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <p className="text-[11px] text-slate-400">Phiên bản</p>
+              <p className="text-[11px] text-muted-foreground">Phiên bản</p>
               <p className="font-medium text-sm">v1.0.0</p>
             </div>
             <div>
-              <p className="text-[11px] text-slate-400">Đăng nhập cuối</p>
+              <p className="text-[11px] text-muted-foreground">Đăng nhập cuối</p>
               <p className="font-medium text-sm">
                 {adminUser?.loginTime ? new Date(adminUser.loginTime).toLocaleString('vi-VN') : 'N/A'}
               </p>
             </div>
             <div>
-              <p className="text-[11px] text-slate-400">Người dùng</p>
+              <p className="text-[11px] text-muted-foreground">Người dùng</p>
               <p className="font-medium text-sm">{stats.totalUsers}</p>
             </div>
             <div>
-              <p className="text-[11px] text-slate-400">Doanh thu</p>
-              <p className="font-medium text-sm text-green-400">
+              <p className="text-[11px] text-muted-foreground">Doanh thu</p>
+              <p className="font-medium text-sm text-green-600 dark:text-green-400">
                 {stats.totalRevenue.toLocaleString('vi-VN')}đ
               </p>
             </div>

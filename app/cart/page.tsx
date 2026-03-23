@@ -241,7 +241,7 @@ export default function CartPage() {
       <FloatingHeader />
 
       <main className="container mx-auto px-4 pt-28 pb-16 relative z-10">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-10">
             <Button
