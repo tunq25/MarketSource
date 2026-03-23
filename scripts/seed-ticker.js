@@ -1,9 +1,14 @@
-const { getFirebaseAdmin } = require('./lib/firebase-admin');
+require('dotenv').config();
+const { getFirebaseAdmin } = require('../lib/firebase-admin');
 
 async function seedTicker() {
   try {
     const admin = await getFirebaseAdmin();
-    const db = admin.database();
+    if (!admin) {
+      console.warn("⚠️ Firebase Admin not initialized. Skipping seed.");
+      process.exit(0);
+    }
+    const db = admin.db; // Fixed: lib/firebase-admin returns { auth, db }
     const tickerRef = db.ref('ticker_events');
 
     const events = [
